@@ -3309,26 +3309,26 @@
     js-yaml "~3.13.1"
     resolve "1.8.1"
 
-"@grafana/data@7.0.0", "@grafana/data@next":
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/@grafana/data/-/data-7.0.0.tgz#89dff54c6a9bf21536beb21e2882880572a84837"
-  integrity sha512-02PxXuzGYf0oAHCwqYn5V4oaN9j/UwAJ9d+zxRe9XJNIPymRhJ+IjK1JoumDekvXn+pJwDH5yMIvSkPsfKynyQ==
+"@grafana/data@7.2.0-pre.0-5a58f2b4c5", "@grafana/data@canary":
+  version "7.2.0-pre.0-5a58f2b4c5"
+  resolved "https://registry.yarnpkg.com/@grafana/data/-/data-7.2.0-pre.0-5a58f2b4c5.tgz#a84cd07d75d39265d80306bc7dfe4518201abc88"
+  integrity sha512-6bpHd82MjX598UZiXkdO3PT+o1O9VjuEsfIMwPFNmplvIDWFAxQ4wK5op357Q4SM2w6Nyy0ETQD6KSzvV1HoWw==
   dependencies:
     "@braintree/sanitize-url" "4.0.0"
     apache-arrow "0.16.0"
-    lodash "4.17.15"
-    rxjs "6.5.5"
+    lodash "4.17.19"
+    rxjs "6.6.2"
     xss "1.0.6"
 
-"@grafana/e2e-selectors@7.0.0":
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/@grafana/e2e-selectors/-/e2e-selectors-7.0.0.tgz#0f19014390fb8d60fcda23ecec2946ab962e8c27"
-  integrity sha512-gm7WZ9AvkGv/K83z/1+X13ibjNwis0fPM1LT/iJhmN/IYB/+/FydDE+uZSBFYRckZpCXMIaoBWMFgFGBtZxneg==
+"@grafana/e2e-selectors@7.2.0-pre.0-5a58f2b4c5":
+  version "7.2.0-pre.0-5a58f2b4c5"
+  resolved "https://registry.yarnpkg.com/@grafana/e2e-selectors/-/e2e-selectors-7.2.0-pre.0-5a58f2b4c5.tgz#ed0deb6102ec7484ecdf47e02e452f402992abff"
+  integrity sha512-j/zRpJfTkKv/HXIlAVJe2UJ014j6W0vsCbBkHICz5ZeelN80b6VOH0Y5dfv5pfmeXROWVqvpIVhYMUrLELclPg==
   dependencies:
     "@grafana/tsconfig" "^1.0.0-rc1"
     commander "5.0.0"
     execa "4.0.0"
-    typescript "3.7.5"
+    typescript "3.9.3"
     yaml "^1.8.3"
 
 "@grafana/eslint-config@^1.0.0-rc1":
@@ -3363,14 +3363,14 @@
   resolved "https://registry.yarnpkg.com/@grafana/tsconfig/-/tsconfig-1.0.0-rc1.tgz#d07ea16755a50cae21000113f30546b61647a200"
   integrity sha512-nucKPGyzlSKYSiJk5RA8GzMdVWhdYNdF+Hh65AXxjD9PlY69JKr5wANj8bVdQboag6dgg0BFKqgKPyY+YtV4Iw==
 
-"@grafana/ui@next":
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/@grafana/ui/-/ui-7.0.0.tgz#9e434adc4eb3806e560ede3524803113db64621e"
-  integrity sha512-b5BMXCjpitKn6OtF0G3rHq0ZhuOl14wXeyPNxBXhw98f62usJfhSLZOZ4w6h4y1sMY70zHnL8tyM23SB2KJ3/w==
+"@grafana/ui@canary":
+  version "7.2.0-pre.0-5a58f2b4c5"
+  resolved "https://registry.yarnpkg.com/@grafana/ui/-/ui-7.2.0-pre.0-5a58f2b4c5.tgz#a380e3f95cab79d4b46fcd12ac8fef9f6072dee8"
+  integrity sha512-ZdGHvLdRByx4t3IqjZRIdt7Dk5FF4XURphRGbfY3ukoWmYqDgrJ9SfcqaUbE+J4mFzVrVIN8rkwyJGwRmxCfcA==
   dependencies:
     "@emotion/core" "^10.0.27"
-    "@grafana/data" "7.0.0"
-    "@grafana/e2e-selectors" "7.0.0"
+    "@grafana/data" "7.2.0-pre.0-5a58f2b4c5"
+    "@grafana/e2e-selectors" "7.2.0-pre.0-5a58f2b4c5"
     "@grafana/slate-react" "0.22.9-grafana"
     "@grafana/tsconfig" "^1.0.0-rc1"
     "@iconscout/react-unicons" "^1.0.0"
@@ -3386,13 +3386,14 @@
     d3 "5.15.0"
     emotion "10.0.27"
     immutable "3.8.2"
-    jquery "3.4.1"
-    lodash "4.17.15"
+    jquery "3.5.1"
+    lodash "4.17.19"
     moment "2.24.0"
+    monaco-editor "0.20.0"
     papaparse "4.6.3"
     rc-cascader "1.0.1"
     rc-drawer "3.1.3"
-    rc-slider "8.7.1"
+    rc-slider "9.3.1"
     rc-time-picker "^3.7.3"
     react "16.12.0"
     react-beautiful-dnd "13.0.0"
@@ -3402,12 +3403,12 @@
     react-dom "16.12.0"
     react-highlight-words "0.16.0"
     react-hook-form "5.1.3"
+    react-monaco-editor "0.36.0"
     react-popper "1.3.3"
     react-storybook-addon-props-combinations "1.1.0"
     react-table "7.0.0"
     react-transition-group "4.3.0"
     slate "0.47.8"
-    storybook-dark-mode "0.4.0"
     tinycolor2 "1.4.1"
 
 "@icons/material@^0.2.4":
@@ -16659,11 +16660,6 @@ jju@~1.4.0:
   resolved "https://registry.yarnpkg.com/jju/-/jju-1.4.0.tgz#a3abe2718af241a2b2904f84a625970f389ae32a"
   integrity sha1-o6vicYryQaKykE+EpiWXDzia4yo=
 
-jquery@3.4.1:
-  version "3.4.1"
-  resolved "https://registry.yarnpkg.com/jquery/-/jquery-3.4.1.tgz#714f1f8d9dde4bdfa55764ba37ef214630d80ef2"
-  integrity sha512-36+AdBzCL+y6qjw5Tx7HgzeGCzC81MDDgaUP8ld2zhx58HdqXGoBd+tHdrBMiyjGQs0Hxs/MLZTu/eHNJJuWPw==
-
 jquery@3.5.1:
   version "3.5.1"
   resolved "https://registry.yarnpkg.com/jquery/-/jquery-3.5.1.tgz#d7b4d08e1bfdb86ad2f1a3d039ea17304717abb5"
@@ -21490,20 +21486,6 @@ rc-drawer@3.1.3:
     rc-util "^4.16.1"
     react-lifecycles-compat "^3.0.4"
 
-rc-slider@8.7.1:
-  version "8.7.1"
-  resolved "https://registry.yarnpkg.com/rc-slider/-/rc-slider-8.7.1.tgz#9ed07362dc93489a38e654b21b8122ad70fd3c42"
-  integrity sha512-WMT5mRFUEcrLWwTxsyS8jYmlaMsTVCZIGENLikHsNv+tE8ThU2lCoPfi/xFNUfJFNFSBFP3MwPez9ZsJmNp13g==
-  dependencies:
-    babel-runtime "6.x"
-    classnames "^2.2.5"
-    prop-types "^15.5.4"
-    rc-tooltip "^3.7.0"
-    rc-util "^4.0.4"
-    react-lifecycles-compat "^3.0.4"
-    shallowequal "^1.1.0"
-    warning "^4.0.3"
-
 rc-slider@9.3.1:
   version "9.3.1"
   resolved "https://registry.yarnpkg.com/rc-slider/-/rc-slider-9.3.1.tgz#444012f3b4847d592b167a9cee6a1a46779a6ef4"
@@ -21527,15 +21509,6 @@ rc-time-picker@^3.7.3:
     rc-trigger "^2.2.0"
     react-lifecycles-compat "^3.0.4"
 
-rc-tooltip@^3.7.0:
-  version "3.7.3"
-  resolved "https://registry.yarnpkg.com/rc-tooltip/-/rc-tooltip-3.7.3.tgz#280aec6afcaa44e8dff0480fbaff9e87fc00aecc"
-  integrity sha512-dE2ibukxxkrde7wH9W8ozHKUO4aQnPZ6qBHtrTH9LoO836PjDdiaWO73fgPB05VfJs9FbZdmGPVEbXCeOP99Ww==
-  dependencies:
-    babel-runtime "6.x"
-    prop-types "^15.5.8"
-    rc-trigger "^2.2.2"
-
 rc-tooltip@^4.0.0:
   version "4.2.1"
   resolved "https://registry.yarnpkg.com/rc-tooltip/-/rc-tooltip-4.2.1.tgz#c1a2d5017ee03a771a9301c0dfdb46dfdf8fef94"
@@ -21543,7 +21516,7 @@ rc-tooltip@^4.0.0:
   dependencies:
     rc-trigger "^4.2.1"
 
-rc-trigger@^2.2.0, rc-trigger@^2.2.2:
+rc-trigger@^2.2.0:
   version "2.6.5"
   resolved "https://registry.yarnpkg.com/rc-trigger/-/rc-trigger-2.6.5.tgz#140a857cf28bd0fa01b9aecb1e26a50a700e9885"
   integrity sha512-m6Cts9hLeZWsTvWnuMm7oElhf+03GOjOLfTuU0QmdB9ZrW7jR2IpI5rpNM7i9MvAAlMAmTx5Zr7g3uu/aMvZAw==
@@ -23393,17 +23366,17 @@ rxjs-spy@^7.5.1:
     error-stack-parser "^2.0.1"
     stacktrace-gps "^3.0.2"
 
-rxjs@6.5.5, rxjs@^6.3.3, rxjs@^6.4.0, rxjs@^6.5.3:
-  version "6.5.5"
-  resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-6.5.5.tgz#c5c884e3094c8cfee31bf27eb87e54ccfc87f9ec"
-  integrity sha512-WfQI+1gohdf0Dai/Bbmk5L5ItH5tYqm3ki2c5GdWhKjalzjg93N3avFjVStyZZz+A2Em+ZxKH5bNghw9UeylGQ==
-  dependencies:
-    tslib "^1.9.0"
-
 rxjs@6.6.2:
   version "6.6.2"
   resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-6.6.2.tgz#8096a7ac03f2cc4fe5860ef6e572810d9e01c0d2"
   integrity sha512-BHdBMVoWC2sL26w//BCu3YzKT4s2jip/WhwsGEDmeKYBhKDZeYezVUnHatYB7L85v5xs0BAQmg6BEYJEKxBabg==
+  dependencies:
+    tslib "^1.9.0"
+
+rxjs@^6.3.3, rxjs@^6.4.0, rxjs@^6.5.3:
+  version "6.5.5"
+  resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-6.5.5.tgz#c5c884e3094c8cfee31bf27eb87e54ccfc87f9ec"
+  integrity sha512-WfQI+1gohdf0Dai/Bbmk5L5ItH5tYqm3ki2c5GdWhKjalzjg93N3avFjVStyZZz+A2Em+ZxKH5bNghw9UeylGQ==
   dependencies:
     tslib "^1.9.0"
 
@@ -24477,14 +24450,6 @@ storybook-chromatic@^2.2.2:
     tmp "^0.1.0"
     tree-kill "^1.1.0"
     uuid "^3.3.2"
-
-storybook-dark-mode@0.4.0:
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/storybook-dark-mode/-/storybook-dark-mode-0.4.0.tgz#d58f6d6591150138d666876d342d724d841af843"
-  integrity sha512-z6srmjsQxMVaaiyeeYav4wywloUzQQg64vX2ajdGViRsbfy9z3TbBcOBdnDzLLLCAx9S8ATly8njoy3S6KsEpg==
-  dependencies:
-    fast-deep-equal "^3.0.0"
-    memoizerific "^1.11.3"
 
 storybook-dark-mode@0.6.1:
   version "0.6.1"
@@ -25791,15 +25756,15 @@ typedarray@^0.0.6:
   resolved "https://registry.yarnpkg.com/typedarray/-/typedarray-0.0.6.tgz#867ac74e3864187b1d3d47d996a78ec5c8830777"
   integrity sha1-hnrHTjhkGHsdPUfZlqeOxciDB3c=
 
-typescript@3.7.5, typescript@~3.7.2:
-  version "3.7.5"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.7.5.tgz#0692e21f65fd4108b9330238aac11dd2e177a1ae"
-  integrity sha512-/P5lkRXkWHNAbcJIiHPfRoKqyd7bsyCma1hZNUGfn20qm64T6ZBlrzprymeu918H+mB/0rIg2gGK/BXkhhYgBw==
-
 typescript@3.9.3:
   version "3.9.3"
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.9.3.tgz#d3ac8883a97c26139e42df5e93eeece33d610b8a"
   integrity sha512-D/wqnB2xzNFIcoBG9FG8cXRDjiqSTbG2wd8DMZeQyJlP1vfTkIxH4GKveWaEBYySKIg+USu+E+EDIR47SqnaMQ==
+
+typescript@~3.7.2:
+  version "3.7.5"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.7.5.tgz#0692e21f65fd4108b9330238aac11dd2e177a1ae"
+  integrity sha512-/P5lkRXkWHNAbcJIiHPfRoKqyd7bsyCma1hZNUGfn20qm64T6ZBlrzprymeu918H+mB/0rIg2gGK/BXkhhYgBw==
 
 typical@^2.6.1:
   version "2.6.1"
