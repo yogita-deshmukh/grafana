@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
@@ -33,11 +35,37 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-func TestQueryCloudWatchMetrics(t *testing.T) {
-	grafDir, cfgPath := createGrafDir(t)
-	sqlStore := setUpDatabase(t, grafDir)
-	addr := startGrafana(t, grafDir, cfgPath, sqlStore)
+var addr string
+var sqlStore *sqlstore.SqlStore
 
+func TestMain(m *testing.M) {
+	grafDir, cfgPath, err := createGrafDir()
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Failed to create Grafana dir")
+	}
+	defer func() {
+		if err := os.RemoveAll(grafDir); err != nil {
+			log.Warn().Err(err).Msgf("Failed to remove Grafana dir")
+		}
+	}()
+
+	sqlStore, err = setUpDatabase(grafDir)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Failed to set up database")
+	}
+
+	var server *Server
+	defer server.Shutdown("")
+	server, addr, err = startGrafana(grafDir, cfgPath, sqlStore)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Failed to start Grafana")
+	}
+	defer server.Shutdown("")
+
+	os.Exit(m.Run())
+}
+
+func TestQueryCloudWatchMetrics(t *testing.T) {
 	origNewCWClient := cloudwatch.NewCWClient
 	t.Cleanup(func() {
 		cloudwatch.NewCWClient = origNewCWClient
@@ -49,6 +77,10 @@ func TestQueryCloudWatchMetrics(t *testing.T) {
 	}
 
 	t.Run("Custom metrics", func(t *testing.T) {
+		t.Log("Cleaning DB")
+		err := sqlStore.Reset()
+		require.NoError(t, err)
+
 		client = cloudwatch.FakeCWClient{
 			Metrics: []*cwapi.Metric{
 				{
@@ -107,10 +139,6 @@ func TestQueryCloudWatchMetrics(t *testing.T) {
 }
 
 func TestQueryCloudWatchLogs(t *testing.T) {
-	grafDir, cfgPath := createGrafDir(t)
-	sqlStore := setUpDatabase(t, grafDir)
-	addr := startGrafana(t, grafDir, cfgPath, sqlStore)
-
 	origNewCWLogsClient := cloudwatch.NewCWLogsClient
 	t.Cleanup(func() {
 		cloudwatch.NewCWLogsClient = origNewCWLogsClient
@@ -122,6 +150,10 @@ func TestQueryCloudWatchLogs(t *testing.T) {
 	}
 
 	t.Run("Describe log groups", func(t *testing.T) {
+		t.Log("Cleaning DB")
+		err := sqlStore.Reset()
+		require.NoError(t, err)
+
 		client = cloudwatch.FakeCWLogsClient{}
 
 		req := dtos.MetricRequest{
@@ -186,125 +218,150 @@ func makeCWRequest(t *testing.T, req dtos.MetricRequest, addr string) tsdb.Respo
 	return tr
 }
 
-func createGrafDir(t *testing.T) (string, string) {
-	t.Helper()
-
+func createGrafDir() (string, string, error) {
 	tmpDir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		os.RemoveAll(tmpDir)
-	})
+	if err != nil {
+		return "", "", err
+	}
 
 	rootDir := filepath.Join("..", "..")
 
 	cfgDir := filepath.Join(tmpDir, "conf")
-	err = os.MkdirAll(cfgDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		return "", "", err
+	}
 	dataDir := filepath.Join(tmpDir, "data")
-	err = os.MkdirAll(dataDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return "", "", err
+	}
 	logsDir := filepath.Join(tmpDir, "logs")
 	pluginsDir := filepath.Join(tmpDir, "plugins")
 	publicDir := filepath.Join(tmpDir, "public")
-	err = os.MkdirAll(publicDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(publicDir, 0755); err != nil {
+		return "", "", err
+	}
 	emailsDir := filepath.Join(publicDir, "emails")
-	err = fs.CopyRecursive(filepath.Join(rootDir, "public", "emails"), emailsDir)
-	require.NoError(t, err)
+	if err := fs.CopyRecursive(filepath.Join(rootDir, "public", "emails"), emailsDir); err != nil {
+		return "", "", err
+	}
 	provDir := filepath.Join(cfgDir, "provisioning")
 	provDSDir := filepath.Join(provDir, "datasources")
-	err = os.MkdirAll(provDSDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(provDSDir, 0755); err != nil {
+		return "", "", err
+	}
 	provNotifiersDir := filepath.Join(provDir, "notifiers")
-	err = os.MkdirAll(provNotifiersDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(provNotifiersDir, 0755); err != nil {
+		return "", "", err
+	}
 	provPluginsDir := filepath.Join(provDir, "plugins")
-	err = os.MkdirAll(provPluginsDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(provPluginsDir, 0755); err != nil {
+		return "", "", err
+	}
 	provDashboardsDir := filepath.Join(provDir, "dashboards")
-	err = os.MkdirAll(provDashboardsDir, 0755)
-	require.NoError(t, err)
+	if err := os.MkdirAll(provDashboardsDir, 0755); err != nil {
+		return "", "", err
+	}
 
 	cfg := ini.Empty()
 	dfltSect := cfg.Section("")
-	_, err = dfltSect.NewKey("app_mode", "development")
-	require.NoError(t, err)
+	if _, err := dfltSect.NewKey("app_mode", "development"); err != nil {
+		return "", "", err
+	}
 
 	pathsSect, err := cfg.NewSection("paths")
-	require.NoError(t, err)
-	_, err = pathsSect.NewKey("data", dataDir)
-	require.NoError(t, err)
-	_, err = pathsSect.NewKey("logs", logsDir)
-	require.NoError(t, err)
-	_, err = pathsSect.NewKey("plugins", pluginsDir)
-	require.NoError(t, err)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := pathsSect.NewKey("data", dataDir); err != nil {
+		return "", "", err
+	}
+	if _, err := pathsSect.NewKey("logs", logsDir); err != nil {
+		return "", "", err
+	}
+	if _, err := pathsSect.NewKey("plugins", pluginsDir); err != nil {
+		return "", "", err
+	}
 
 	logSect, err := cfg.NewSection("log")
-	require.NoError(t, err)
-	_, err = logSect.NewKey("level", "debug")
-	require.NoError(t, err)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := logSect.NewKey("level", "debug"); err != nil {
+		return "", "", err
+	}
 
 	serverSect, err := cfg.NewSection("server")
-	require.NoError(t, err)
-	_, err = serverSect.NewKey("port", "0")
-	require.NoError(t, err)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := serverSect.NewKey("port", "0"); err != nil {
+		return "", "", err
+	}
 
 	anonSect, err := cfg.NewSection("auth.anonymous")
-	require.NoError(t, err)
-	_, err = anonSect.NewKey("enabled", "true")
-	require.NoError(t, err)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := anonSect.NewKey("enabled", "true"); err != nil {
+		return "", "", err
+	}
 
 	cfgPath := filepath.Join(cfgDir, "test.ini")
-	err = cfg.SaveTo(cfgPath)
-	require.NoError(t, err)
+	if err := cfg.SaveTo(cfgPath); err != nil {
+		return "", "", err
+	}
 
-	err = fs.CopyFile(filepath.Join(rootDir, "conf", "defaults.ini"), filepath.Join(cfgDir, "defaults.ini"))
-	require.NoError(t, err)
+	if err := fs.CopyFile(filepath.Join(rootDir, "conf", "defaults.ini"), filepath.Join(cfgDir, "defaults.ini")); err != nil {
+		return "", "", err
+	}
 
-	return tmpDir, cfgPath
+	return tmpDir, cfgPath, nil
 }
 
-func startGrafana(t *testing.T, grafDir, cfgPath string, sqlStore *sqlstore.SqlStore) string {
-	t.Helper()
-
+func startGrafana(grafDir, cfgPath string, sqlStore *sqlstore.SqlStore) (*Server, string, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
+	if err != nil {
+		return nil, "", err
+	}
 	server, err := New(Config{
 		ConfigFile: cfgPath,
 		HomePath:   grafDir,
 		Listener:   listener,
 		SQLStore:   sqlStore,
 	})
-	require.NoError(t, err)
+	if err != nil {
+		return nil, "", err
+	}
 
 	go func() {
 		if err := server.Run(); err != nil {
-			t.Log("Server exited uncleanly", "error", err)
+			log.Error().Err(err).Msgf("Server exited uncleanly")
 		}
 	}()
-	t.Cleanup(func() {
-		server.Shutdown("")
-	})
 
 	// Wait for Grafana to be ready
 	addr := listener.Addr().String()
 	resp, err := http.Get(fmt.Sprintf("http://%s/api/health", addr))
-	require.NoError(t, err)
-	require.NotNil(t, resp)
+	if err != nil {
+		return nil, "", err
+	}
 	resp.Body.Close()
-	require.Equal(t, 200, resp.StatusCode)
+	if resp.StatusCode != 200 {
+		return nil, "", fmt.Errorf("got error response: %s", resp.Status)
+	}
 
-	t.Logf("Grafana is listening on %s", addr)
+	log.Debug().Msgf("Grafana is listening on %s", addr)
 
-	return addr
+	return server, addr, nil
 }
 
-func setUpDatabase(t *testing.T, grafDir string) *sqlstore.SqlStore {
-	t.Helper()
+func setUpDatabase(grafDir string) (*sqlstore.SqlStore, error) {
+	sqlStore, err := sqlstore.New()
+	if err != nil {
+		return nil, err
+	}
 
-	sqlStore := sqlstore.InitTestDB(t)
-
-	err := sqlStore.WithDbSession(context.Background(), func(sess *sqlstore.DBSession) error {
+	if err := sqlStore.WithDbSession(context.Background(), func(sess *sqlstore.DBSession) error {
 		_, err := sess.Insert(&models.DataSource{
 			Id:      1,
 			OrgId:   1,
@@ -314,8 +371,9 @@ func setUpDatabase(t *testing.T, grafDir string) *sqlstore.SqlStore {
 			Updated: time.Now(),
 		})
 		return err
-	})
-	require.NoError(t, err)
+	}); err != nil {
+		return nil, err
+	}
 
-	return sqlStore
+	return sqlStore, nil
 }

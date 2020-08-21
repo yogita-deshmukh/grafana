@@ -26,6 +26,7 @@ import (
 	"github.com/grafana/grafana/pkg/util"
 	"github.com/grafana/grafana/pkg/util/errutil"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 	"xorm.io/xorm"
 )
 
@@ -62,6 +63,86 @@ type SqlStore struct {
 	log                         log.Logger
 	Dialect                     migrator.Dialect
 	skipEnsureDefaultOrgAndUser bool
+	migrator                    *migrator.Migrator
+}
+
+// New creates a new SqlStore.
+func New() (*SqlStore, error) {
+	log := log.New("sqlstore")
+
+	dbType := migrator.SQLITE
+	cfg := setting.NewCfg()
+	sec, err := cfg.Raw.NewSection("database")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := sec.NewKey("type", dbType); err != nil {
+		return nil, err
+	}
+
+	connStr := sqlutil.Sqlite3TestDB().ConnStr
+	if _, err := sec.NewKey("connection_string", connStr); err != nil {
+		return nil, err
+	}
+
+	log.Debug("Creating database connection", "connStr", connStr)
+	engine, err := xorm.NewEngine(dbType, sec.Key("connection_string").String())
+	if err != nil {
+		return nil, err
+	}
+	engine.DatabaseTZ = time.UTC
+	engine.TZLocation = time.UTC
+
+	m := migrator.NewMigrator(engine)
+	migrations.AddMigrations(m)
+	for _, descriptor := range registry.GetServices() {
+		sc, ok := descriptor.Instance.(registry.DatabaseMigrator)
+		if ok {
+			sc.AddMigration(m)
+		}
+	}
+
+	ss := &SqlStore{
+		Bus:                         bus.New(),
+		CacheService:                localcache.New(5*time.Minute, 10*time.Minute),
+		skipEnsureDefaultOrgAndUser: true,
+		Cfg:                         cfg,
+		Dialect:                     migrator.NewDialect(engine),
+		log:                         log,
+		migrator:                    m,
+	}
+	ss.readConfig()
+
+	// Init repo instances
+	annotations.SetRepository(&SqlAnnotationRepo{})
+	ss.Bus.SetTransactionManager(ss)
+
+	// Register handlers
+	ss.addUserQueryAndCommandHandlers()
+	ss.addAlertNotificationUidByIdHandler()
+
+	return ss, nil
+}
+
+// Reset resets the state of the database.
+func (ss *SqlStore) Reset() error {
+	if err := ss.Dialect.CleanDB(); err != nil {
+		return err
+	}
+
+	if err := ss.migrator.Start(); err != nil {
+		return errutil.Wrap("migrating database failed", err)
+	}
+
+	if err := ss.logOrgsNotice(); err != nil {
+		return err
+	}
+
+	if ss.skipEnsureDefaultOrgAndUser {
+		return nil
+	}
+
+	return ss.ensureMainOrgAndAdminUser()
 }
 
 func (ss *SqlStore) Init() error {
@@ -363,6 +444,8 @@ func (ss *SqlStore) readConfig() {
 // Interface of arguments for testing db
 type ITestDB interface {
 	Helper()
+	Errorf(format string, args ...interface{})
+	FailNow()
 	Fatalf(format string, args ...interface{})
 	Logf(format string, args ...interface{})
 }
@@ -386,12 +469,9 @@ func InitTestDB(t ITestDB) *SqlStore {
 	// set test db config
 	sqlstore.Cfg = setting.NewCfg()
 	sec, err := sqlstore.Cfg.Raw.NewSection("database")
-	if err != nil {
-		t.Fatalf("Failed to create section: %s", err)
-	}
-	if _, err := sec.NewKey("type", dbType); err != nil {
-		t.Fatalf("Failed to create key: %s", err)
-	}
+	require.NoError(t, err, "Failed to create section")
+	_, err = sec.NewKey("type", dbType)
+	require.NoError(t, err, "Failed to create key")
 
 	switch dbType {
 	case "mysql":
@@ -411,9 +491,7 @@ func InitTestDB(t ITestDB) *SqlStore {
 	// need to get engine to clean db before we init
 	t.Logf("Creating database connection: %q", sec.Key("connection_string"))
 	engine, err := xorm.NewEngine(dbType, sec.Key("connection_string").String())
-	if err != nil {
-		t.Fatalf("Failed to init test database: %v", err)
-	}
+	require.NoError(t, err, "Failed to init test database")
 
 	sqlstore.Dialect = migrator.NewDialect(engine)
 
@@ -421,13 +499,11 @@ func InitTestDB(t ITestDB) *SqlStore {
 	dialect = sqlstore.Dialect
 
 	t.Logf("Cleaning DB")
-	if err := dialect.CleanDB(); err != nil {
-		t.Fatalf("Failed to clean test db %v", err)
-	}
+	err = sqlstore.Dialect.CleanDB()
+	require.NoError(t, err, "Failed to clean test DB")
 
-	if err := sqlstore.Init(); err != nil {
-		t.Fatalf("Failed to init test database: %v", err)
-	}
+	err = sqlstore.Init()
+	require.NoError(t, err, "Failed to init test database")
 
 	sqlstore.engine.DatabaseTZ = time.UTC
 	sqlstore.engine.TZLocation = time.UTC

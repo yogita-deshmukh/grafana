@@ -124,6 +124,11 @@ func (s *Server) init(cfg *Config) error {
 	login.Init()
 	social.NewOAuthService()
 
+	if cfg.SQLStore != nil {
+		// TODO: Inject cfg.SQLStore in DI system
+		//s.log.Debug("Using provided SQL store")
+	}
+
 	services := registry.GetServices()
 	if err := s.buildServiceGraph(services); err != nil {
 		return err
