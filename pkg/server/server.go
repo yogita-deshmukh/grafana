@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/facebookgo/inject"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/grafana/grafana/pkg/api"
+	"github.com/grafana/grafana/pkg/api/routing"
 	"github.com/grafana/grafana/pkg/bus"
 	_ "github.com/grafana/grafana/pkg/extensions"
 	"github.com/grafana/grafana/pkg/infra/localcache"
@@ -27,6 +29,7 @@ import (
 	_ "github.com/grafana/grafana/pkg/infra/usagestats"
 	"github.com/grafana/grafana/pkg/login"
 	"github.com/grafana/grafana/pkg/login/social"
+	"github.com/grafana/grafana/pkg/middleware"
 	_ "github.com/grafana/grafana/pkg/plugins"
 	"github.com/grafana/grafana/pkg/registry"
 	_ "github.com/grafana/grafana/pkg/services/alerting"
@@ -93,6 +96,7 @@ type Server struct {
 	shutdownReason     string
 	shutdownInProgress bool
 	isInitialized      bool
+	mtx                sync.Mutex
 
 	configFile  string
 	homePath    string
@@ -106,6 +110,9 @@ type Server struct {
 
 // init initializes the server and its services.
 func (s *Server) init(cfg *Config) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	if s.isInitialized {
 		return nil
 	}
@@ -130,6 +137,8 @@ func (s *Server) init(cfg *Config) error {
 
 		if cfg != nil {
 			if httpS, ok := service.Instance.(*api.HTTPServer); ok {
+				// Configure the api.HTTPServer if necessary
+				// Hopefully we can find a better solution, maybe with a more advanced DI framework, f.ex. Dig?
 				if cfg.Listener != nil {
 					s.log.Debug("Using provided listener for HTTP server")
 					httpS.Listener = cfg.Listener
@@ -268,6 +277,7 @@ func (s *Server) buildServiceGraph(services []*registry.Descriptor) error {
 	objs := []interface{}{
 		bus.GetBus(),
 		s.cfg,
+		routing.NewRouteRegister(middleware.RequestMetrics, middleware.RequestTracing),
 		localcache.New(5*time.Minute, 10*time.Minute),
 		s,
 	}

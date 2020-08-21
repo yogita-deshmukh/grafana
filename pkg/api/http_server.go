@@ -174,7 +174,6 @@ func (hs *HTTPServer) getListener() (net.Listener, error) {
 
 	switch setting.Protocol {
 	case setting.HTTP, setting.HTTPS, setting.HTTP2:
-		// TODO: Support already having a listener
 		listener, err := net.Listen("tcp", hs.httpSrv.Addr)
 		if err != nil {
 			return nil, errutil.Wrapf(err, "failed to open listener on address %s", hs.httpSrv.Addr)
