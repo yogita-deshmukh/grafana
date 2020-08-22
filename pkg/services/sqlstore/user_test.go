@@ -301,7 +301,7 @@ func TestUserDataAccess(t *testing.T) {
 
 					Convey("Should delete connected org users and permissions", func() {
 						query := &models.GetOrgUsersQuery{OrgId: users[0].OrgId}
-						err = GetOrgUsersForTest(query)
+						err = getOrgUsersForTest(query, ss)
 						So(err, ShouldBeNil)
 
 						So(len(query.Result), ShouldEqual, 1)
@@ -577,7 +577,7 @@ func TestUserDataAccess(t *testing.T) {
 				Name:  "user",
 				Login: username,
 			}
-			err := CreateUser(context.Background(), createUserCmd)
+			err := ss.CreateUser(context.Background(), createUserCmd)
 			So(err, ShouldBeNil)
 
 			Convey("When trying to create a new user with the same email, an error is returned", func() {
@@ -587,7 +587,7 @@ func TestUserDataAccess(t *testing.T) {
 					Login:        "user2",
 					SkipOrgSetup: true,
 				}
-				err := CreateUser(context.Background(), createUserCmd)
+				err := ss.CreateUser(context.Background(), createUserCmd)
 				So(err, ShouldEqual, models.ErrUserAlreadyExists)
 			})
 
@@ -598,17 +598,17 @@ func TestUserDataAccess(t *testing.T) {
 					Login:        username,
 					SkipOrgSetup: true,
 				}
-				err := CreateUser(context.Background(), createUserCmd)
+				err := ss.CreateUser(context.Background(), createUserCmd)
 				So(err, ShouldEqual, models.ErrUserAlreadyExists)
 			})
 		})
 	})
 }
 
-func GetOrgUsersForTest(query *models.GetOrgUsersQuery) error {
+func getOrgUsersForTest(query *models.GetOrgUsersQuery, ss *SqlStore) error {
 	query.Result = make([]*models.OrgUserDTO, 0)
-	sess := x.Table("org_user")
-	sess.Join("LEFT ", x.Dialect().Quote("user"), fmt.Sprintf("org_user.user_id=%s.id", x.Dialect().Quote("user")))
+	sess := ss.engine.Table("org_user")
+	sess.Join("LEFT ", ss.engine.Dialect().Quote("user"), fmt.Sprintf("org_user.user_id=%s.id", ss.engine.Dialect().Quote("user")))
 	sess.Where("org_user.org_id=?", query.OrgId)
 	sess.Cols("org_user.org_id", "org_user.user_id", "user.email", "user.login", "org_user.role")
 

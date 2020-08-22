@@ -28,11 +28,12 @@ type MigrationLog struct {
 }
 
 func NewMigrator(engine *xorm.Engine) *Migrator {
-	mg := &Migrator{}
-	mg.x = engine
-	mg.Logger = log.New("migrator")
-	mg.migrations = make([]Migration, 0)
-	mg.Dialect = NewDialect(mg.x)
+	mg := &Migrator{
+		x:          engine,
+		Logger:     log.New("migrator"),
+		migrations: make([]Migration, 0),
+		Dialect:    NewDialect(engine),
+	}
 	return mg
 }
 
@@ -54,6 +55,7 @@ func (mg *Migrator) GetMigrationLog() (map[string]MigrationLog, error) {
 		return nil, errutil.Wrap("failed to check table existence", err)
 	}
 	if !exists {
+		mg.Logger.Info("Migration log table doesn't exist")
 		return logMap, nil
 	}
 
@@ -81,8 +83,7 @@ func (mg *Migrator) Start() error {
 
 	for _, m := range mg.migrations {
 		m := m
-		_, exists := logMap[m.Id()]
-		if exists {
+		if _, exists := logMap[m.Id()]; exists {
 			mg.Logger.Debug("Skipping migration: Already executed", "id", m.Id())
 			continue
 		}
@@ -106,11 +107,40 @@ func (mg *Migrator) Start() error {
 				return err
 			}
 			record.Success = true
-			_, err = sess.Insert(&record)
-			return err
+			if _, err := sess.Insert(&record); err != nil {
+				return err
+			}
+
+			mg.Logger.Info("Querying migration_log #1")
+			results, err := sess.SQL("select id from `migration_log`").Query()
+			if err != nil {
+				mg.Logger.Error("Querying migration_log #1 failed", "error", err)
+				return err
+			}
+
+			mg.Logger.Info("Got results from migration_log", "results", results)
+
+			return nil
 		})
 		if err != nil {
 			return errutil.Wrap("migration failed", err)
+		}
+
+		mg.Logger.Info("Migration succeeded")
+
+		if err := mg.inTransaction(func(sess *xorm.Session) error {
+			mg.Logger.Info("Querying migration_log #4")
+			results, err := sess.SQL("select id from migration_log").Query()
+			if err != nil {
+				mg.Logger.Error("Querying migration_log failed", "error", err)
+				return err
+			}
+
+			mg.Logger.Info("Got results from migration_log", "results", results)
+
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 
@@ -125,7 +155,6 @@ func (mg *Migrator) exec(m Migration, sess *xorm.Session) error {
 	condition := m.GetCondition()
 	if condition != nil {
 		sql, args := condition.Sql(mg.Dialect)
-
 		if sql != "" {
 			mg.Logger.Debug("Executing migration condition sql", "id", m.Id(), "sql", sql, "args", args)
 			results, err := sess.SQL(sql, args...).Query()
@@ -147,10 +176,9 @@ func (mg *Migrator) exec(m Migration, sess *xorm.Session) error {
 		err = codeMigration.Exec(sess, mg)
 	} else {
 		sql := m.Sql(mg.Dialect)
-		mg.Logger.Debug("Executing sql migration", "id", m.Id(), "sql", sql)
+		mg.Logger.Debug("Executing SQL migration", "id", m.Id(), "sql", sql)
 		_, err = sess.Exec(sql)
 	}
-
 	if err != nil {
 		mg.Logger.Error("Executing migration failed", "id", m.Id(), "error", err)
 		return err
@@ -170,16 +198,45 @@ func (mg *Migrator) inTransaction(callback dbTransactionFunc) error {
 	}
 
 	if err := callback(sess); err != nil {
-		if rollErr := sess.Rollback(); err != rollErr {
-			return errutil.Wrapf(err, "Failed to roll back transaction due to error: %s", rollErr)
+		mg.Logger.Error("An error happened in callback", "err", err)
+		if rollErr := sess.Rollback(); rollErr != nil {
+			return errutil.Wrapf(rollErr, "failed to roll back transaction")
 		}
 
 		return err
 	}
+	mg.Logger.Info("No error happened in callback")
+
+	mg.Logger.Info("Querying migration_log #2")
+	results, err := sess.SQL("select id from `migration_log`").Query()
+	if err != nil {
+		mg.Logger.Error("Querying migration_log #2 failed", "error", err)
+		return err
+	}
+
+	mg.Logger.Info("Got results from migration_log", "results", results)
 
 	if err := sess.Commit(); err != nil {
 		return err
 	}
+
+	sess = mg.x.NewSession()
+	defer sess.Close()
+
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+
+	mg.Logger.Info("Querying migration_log #3")
+	results, err = sess.SQL("select id from `migration_log`").Query()
+	if err != nil {
+		mg.Logger.Error("Querying migration_log #3 failed", "error", err)
+		return err
+	}
+
+	mg.Logger.Info("Got results from migration_log", "results", results)
+
+	mg.Logger.Info("Successfully committed transaction")
 
 	return nil
 }

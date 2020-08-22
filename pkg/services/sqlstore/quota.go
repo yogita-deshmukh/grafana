@@ -37,7 +37,7 @@ func (ss *SqlStore) GetOrgQuotaByTarget(query *models.GetOrgQuotaByTargetQuery) 
 	}
 
 	//get quota used.
-	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where org_id=?", dialect.Quote(query.Target))
+	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where org_id=?", ss.Dialect.Quote(query.Target))
 	resp := make([]*targetCount, 0)
 	if err := ss.engine.SQL(rawSql, query.OrgId).Find(&resp); err != nil {
 		return err
@@ -80,7 +80,7 @@ func (ss *SqlStore) GetOrgQuotas(query *models.GetOrgQuotasQuery) error {
 	result := make([]*models.OrgQuotaDTO, len(quotas))
 	for i, q := range quotas {
 		//get quota used.
-		rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where org_id=?", dialect.Quote(q.Target))
+		rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where org_id=?", ss.Dialect.Quote(q.Target))
 		resp := make([]*targetCount, 0)
 		if err := ss.engine.SQL(rawSql, q.OrgId).Find(&resp); err != nil {
 			return err
@@ -140,7 +140,7 @@ func (ss *SqlStore) GetUserQuotaByTarget(query *models.GetUserQuotaByTargetQuery
 	}
 
 	//get quota used.
-	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where user_id=?", dialect.Quote(query.Target))
+	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where user_id=?", ss.Dialect.Quote(query.Target))
 	resp := make([]*targetCount, 0)
 	if err := ss.engine.SQL(rawSql, query.UserId).Find(&resp); err != nil {
 		return err
@@ -183,7 +183,7 @@ func (ss *SqlStore) GetUserQuotas(query *models.GetUserQuotasQuery) error {
 	result := make([]*models.UserQuotaDTO, len(quotas))
 	for i, q := range quotas {
 		//get quota used.
-		rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where user_id=?", dialect.Quote(q.Target))
+		rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where user_id=?", ss.Dialect.Quote(q.Target))
 		resp := make([]*targetCount, 0)
 		if err := ss.engine.SQL(rawSql, q.UserId).Find(&resp); err != nil {
 			return err
@@ -232,7 +232,7 @@ func (ss *SqlStore) UpdateUserQuota(cmd *models.UpdateUserQuotaCmd) error {
 
 func (ss *SqlStore) GetGlobalQuotaByTarget(query *models.GetGlobalQuotaByTargetQuery) error {
 	//get quota used.
-	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s", dialect.Quote(query.Target))
+	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s", ss.Dialect.Quote(query.Target))
 	resp := make([]*targetCount, 0)
 	if err := ss.engine.SQL(rawSql).Find(&resp); err != nil {
 		return err

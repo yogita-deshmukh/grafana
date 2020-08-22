@@ -93,6 +93,7 @@ func (ss *SqlStore) GetTempUsersQuery(query *models.GetTempUsersQuery) error {
 }
 
 func (ss *SqlStore) GetTempUserByCode(query *models.GetTempUserByCodeQuery) error {
+	dialect := ss.Dialect
 	var rawSql = `SELECT
 	                tu.id             as id,
 	                tu.org_id         as org_id,
@@ -114,10 +115,10 @@ func (ss *SqlStore) GetTempUserByCode(query *models.GetTempUserByCodeQuery) erro
 	var tempUser models.TempUserDTO
 	sess := ss.engine.SQL(rawSql, query.Code)
 	has, err := sess.Get(&tempUser)
-
 	if err != nil {
 		return err
-	} else if !has {
+	}
+	if !has {
 		return models.ErrTempUserNotFound
 	}
 

@@ -73,7 +73,9 @@ func deleteAlertByIdInternal(alertId int64, reason string, sess *DBSession) erro
 
 func (ss *SqlStore) HandleAlertsQuery(query *models.GetAlertsQuery) error {
 	dialect := ss.Dialect
-	builder := SqlBuilder{}
+	builder := SqlBuilder{
+		dialect: dialect,
+	}
 
 	builder.Write(`SELECT
 		alert.id,

@@ -238,7 +238,7 @@ func (ss *SqlStore) findDashboards(query *search.FindPersistedDashboardsQuery) (
 		permissions.DashboardPermissionFilter{
 			OrgRole:         query.SignedInUser.OrgRole,
 			OrgId:           query.SignedInUser.OrgId,
-			Dialect:         dialect,
+			Dialect:         ss.Dialect,
 			UserId:          query.SignedInUser.UserId,
 			PermissionLevel: query.Permission,
 		},
@@ -265,11 +265,11 @@ func (ss *SqlStore) findDashboards(query *search.FindPersistedDashboardsQuery) (
 	}
 
 	if len(query.Title) > 0 {
-		filters = append(filters, searchstore.TitleFilter{Dialect: dialect, Title: query.Title})
+		filters = append(filters, searchstore.TitleFilter{Dialect: ss.Dialect, Title: query.Title})
 	}
 
 	if len(query.Type) > 0 {
-		filters = append(filters, searchstore.TypeFilter{Dialect: dialect, Type: query.Type})
+		filters = append(filters, searchstore.TypeFilter{Dialect: ss.Dialect, Type: query.Type})
 	}
 
 	if len(query.FolderIds) > 0 {
@@ -277,7 +277,7 @@ func (ss *SqlStore) findDashboards(query *search.FindPersistedDashboardsQuery) (
 	}
 
 	var res []DashboardSearchProjection
-	sb := &searchstore.Builder{Dialect: dialect, Filters: filters}
+	sb := &searchstore.Builder{Dialect: ss.Dialect, Filters: filters}
 
 	limit := query.Limit
 	if limit < 1 {
@@ -492,10 +492,10 @@ func (ss *SqlStore) GetDashboardPermissionsForUser(query *models.GetDashboardPer
 	group by d.id
 	order by d.id asc`
 	params = append(params, query.OrgId)
-	params = append(params, dialect.BooleanStr(true))
+	params = append(params, ss.Dialect.BooleanStr(true))
 	params = append(params, query.UserId)
 	params = append(params, query.UserId)
-	params = append(params, dialect.BooleanStr(false))
+	params = append(params, ss.Dialect.BooleanStr(false))
 
 	err := ss.engine.SQL(sql, params...).Find(&query.Result)
 
@@ -508,7 +508,7 @@ func (ss *SqlStore) GetDashboardPermissionsForUser(query *models.GetDashboardPer
 
 func (ss *SqlStore) GetDashboardsByPluginId(query *models.GetDashboardsByPluginIdQuery) error {
 	var dashboards = make([]*models.Dashboard, 0)
-	whereExpr := "org_id=? AND plugin_id=? AND is_folder=" + dialect.BooleanStr(false)
+	whereExpr := "org_id=? AND plugin_id=? AND is_folder=" + ss.Dialect.BooleanStr(false)
 
 	err := ss.engine.Where(whereExpr, query.OrgId, query.PluginId).Find(&dashboards)
 	query.Result = dashboards
@@ -563,7 +563,7 @@ func (ss *SqlStore) GetDashboardUIDById(query *models.GetDashboardRefByIdQuery) 
 	return nil
 }
 
-func getExistingDashboardByIdOrUidForUpdate(sess *DBSession, cmd *models.ValidateDashboardBeforeSaveCommand) (err error) {
+func (ss *SqlStore) getExistingDashboardByIdOrUidForUpdate(sess *DBSession, cmd *models.ValidateDashboardBeforeSaveCommand) (err error) {
 	dash := cmd.Dashboard
 
 	dashWithIdExists := false
@@ -596,7 +596,8 @@ func getExistingDashboardByIdOrUidForUpdate(sess *DBSession, cmd *models.Validat
 
 	if dash.FolderId > 0 {
 		var existingFolder models.Dashboard
-		folderExists, folderErr := sess.Where("org_id=? AND id=? AND is_folder=?", dash.OrgId, dash.FolderId, dialect.BooleanStr(true)).Get(&existingFolder)
+		folderExists, folderErr := sess.Where("org_id=? AND id=? AND is_folder=?", dash.OrgId, dash.FolderId,
+			ss.Dialect.BooleanStr(true)).Get(&existingFolder)
 		if folderErr != nil {
 			return folderErr
 		}
@@ -652,11 +653,12 @@ func getExistingDashboardByIdOrUidForUpdate(sess *DBSession, cmd *models.Validat
 	return nil
 }
 
-func getExistingDashboardByTitleAndFolder(sess *DBSession, cmd *models.ValidateDashboardBeforeSaveCommand) error {
+func (ss *SqlStore) getExistingDashboardByTitleAndFolder(sess *DBSession, cmd *models.ValidateDashboardBeforeSaveCommand) error {
 	dash := cmd.Dashboard
 	var existing models.Dashboard
 
-	exists, err := sess.Where("org_id=? AND slug=? AND (is_folder=? OR folder_id=?)", dash.OrgId, dash.Slug, dialect.BooleanStr(true), dash.FolderId).Get(&existing)
+	exists, err := sess.Where("org_id=? AND slug=? AND (is_folder=? OR folder_id=?)", dash.OrgId, dash.Slug,
+		ss.Dialect.BooleanStr(true), dash.FolderId).Get(&existing)
 	if err != nil {
 		return err
 	}
@@ -690,11 +692,11 @@ func (ss *SqlStore) ValidateDashboardBeforeSave(cmd *models.ValidateDashboardBef
 	cmd.Result = &models.ValidateDashboardBeforeSaveResult{}
 
 	return ss.inTransaction(func(sess *DBSession) error {
-		if err = getExistingDashboardByIdOrUidForUpdate(sess, cmd); err != nil {
+		if err := ss.getExistingDashboardByIdOrUidForUpdate(sess, cmd); err != nil {
 			return err
 		}
 
-		if err = getExistingDashboardByTitleAndFolder(sess, cmd); err != nil {
+		if err := ss.getExistingDashboardByTitleAndFolder(sess, cmd); err != nil {
 			return err
 		}
 
@@ -708,8 +710,12 @@ func (ss *SqlStore) HasEditPermissionInFolders(query *models.HasEditPermissionIn
 		return nil
 	}
 
-	builder := &SqlBuilder{}
-	builder.Write("SELECT COUNT(dashboard.id) AS count FROM dashboard WHERE dashboard.org_id = ? AND dashboard.is_folder = ?", query.SignedInUser.OrgId, dialect.BooleanStr(true))
+	builder := &SqlBuilder{
+		dialect: ss.Dialect,
+	}
+	builder.Write(
+		"SELECT COUNT(dashboard.id) AS count FROM dashboard WHERE dashboard.org_id = ? AND dashboard.is_folder = ?",
+		query.SignedInUser.OrgId, ss.Dialect.BooleanStr(true))
 	builder.writeDashboardPermissionFilter(query.SignedInUser, models.PERMISSION_EDIT)
 
 	type folderCount struct {
@@ -732,8 +738,11 @@ func (ss *SqlStore) HasAdminPermissionInFolders(query *models.HasAdminPermission
 		return nil
 	}
 
-	builder := &SqlBuilder{}
-	builder.Write("SELECT COUNT(dashboard.id) AS count FROM dashboard WHERE dashboard.org_id = ? AND dashboard.is_folder = ?", query.SignedInUser.OrgId, dialect.BooleanStr(true))
+	builder := &SqlBuilder{
+		dialect: ss.Dialect,
+	}
+	builder.Write("SELECT COUNT(dashboard.id) AS count FROM dashboard WHERE dashboard.org_id = ? AND dashboard.is_folder = ?",
+		query.SignedInUser.OrgId, ss.Dialect.BooleanStr(true))
 	builder.writeDashboardPermissionFilter(query.SignedInUser, models.PERMISSION_ADMIN)
 
 	type folderCount struct {

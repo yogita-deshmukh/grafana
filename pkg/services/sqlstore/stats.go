@@ -10,21 +10,21 @@ import (
 var activeUserTimeLimit = time.Hour * 24 * 30
 
 func (ss *SqlStore) GetAlertNotifiersUsageStats(ctx context.Context, query *models.GetAlertNotifierUsageStatsQuery) error {
-	var rawSql = `SELECT COUNT(*) AS count, type FROM ` + dialect.Quote("alert_notification") + ` GROUP BY type`
+	var rawSql = `SELECT COUNT(*) AS count, type FROM ` + ss.Dialect.Quote("alert_notification") + ` GROUP BY type`
 	query.Result = make([]*models.NotifierUsageStats, 0)
 	err := ss.engine.SQL(rawSql).Find(&query.Result)
 	return err
 }
 
 func (ss *SqlStore) GetDataSourceStats(query *models.GetDataSourceStatsQuery) error {
-	var rawSql = `SELECT COUNT(*) AS count, type FROM ` + dialect.Quote("data_source") + ` GROUP BY type`
+	var rawSql = `SELECT COUNT(*) AS count, type FROM ` + ss.Dialect.Quote("data_source") + ` GROUP BY type`
 	query.Result = make([]*models.DataSourceStats, 0)
 	err := ss.engine.SQL(rawSql).Find(&query.Result)
 	return err
 }
 
 func (ss *SqlStore) GetDataSourceAccessStats(query *models.GetDataSourceAccessStatsQuery) error {
-	var rawSql = `SELECT COUNT(*) AS count, type, access FROM ` + dialect.Quote("data_source") + ` GROUP BY type, access`
+	var rawSql = `SELECT COUNT(*) AS count, type, access FROM ` + ss.Dialect.Quote("data_source") + ` GROUP BY type, access`
 	query.Result = make([]*models.DataSourceAccessStats, 0)
 	err := ss.engine.SQL(rawSql).Find(&query.Result)
 	return err
@@ -33,7 +33,9 @@ func (ss *SqlStore) GetDataSourceAccessStats(query *models.GetDataSourceAccessSt
 func (ss *SqlStore) GetSystemStats(query *models.GetSystemStatsQuery) error {
 	dialect := ss.Dialect
 
-	sb := &SqlBuilder{}
+	sb := &SqlBuilder{
+		dialect: ss.Dialect,
+	}
 	sb.Write("SELECT ")
 	sb.Write(`(SELECT COUNT(*) FROM ` + dialect.Quote("user") + `) AS users,`)
 	sb.Write(`(SELECT COUNT(*) FROM ` + dialect.Quote("org") + `) AS orgs,`)
@@ -109,6 +111,7 @@ func (ss *SqlStore) roleCounterSQL(role string, alias string, onlyActive bool) s
 
 func (ss *SqlStore) GetAdminStats(query *models.GetAdminStatsQuery) error {
 	activeEndDate := time.Now().Add(-activeUserTimeLimit)
+	dialect := ss.Dialect
 
 	var rawSql = `SELECT
 		(
@@ -170,11 +173,10 @@ func (ss *SqlStore) GetAdminStats(query *models.GetAdminStatsQuery) error {
 }
 
 func (ss *SqlStore) GetSystemUserCountStats(ctx context.Context, query *models.GetSystemUserCountStatsQuery) error {
-	return withDbSession(ctx, func(sess *DBSession) error {
-		var rawSql = `SELECT COUNT(id) AS Count FROM ` + dialect.Quote("user")
+	return ss.WithDbSession(ctx, func(sess *DBSession) error {
+		var rawSql = `SELECT COUNT(id) AS Count FROM ` + ss.Dialect.Quote("user")
 		var stats models.SystemUserCountStats
-		_, err := sess.SQL(rawSql).Get(&stats)
-		if err != nil {
+		if _, err := sess.SQL(rawSql).Get(&stats); err != nil {
 			return err
 		}
 
@@ -186,10 +188,12 @@ func (ss *SqlStore) GetSystemUserCountStats(ctx context.Context, query *models.G
 
 func (ss *SqlStore) GetActiveUserStats(query *models.GetActiveUserStatsQuery) error {
 	activeUserDeadlineDate := time.Now().Add(-activeUserTimeLimit)
-	sb := &SqlBuilder{}
+	sb := &SqlBuilder{
+		dialect: ss.Dialect,
+	}
 
 	sb.Write(`SELECT `)
-	sb.Write(`(SELECT COUNT(*) FROM `+dialect.Quote("user")+` WHERE last_seen_at > ?) AS active_users,`, activeUserDeadlineDate)
+	sb.Write(`(SELECT COUNT(*) FROM `+ss.Dialect.Quote("user")+` WHERE last_seen_at > ?) AS active_users,`, activeUserDeadlineDate)
 	sb.Write(ss.roleCounterSQL("Viewer", "viewers", true)+`,`, activeUserDeadlineDate)
 	sb.Write(ss.roleCounterSQL("Editor", "editors", true)+`,`, activeUserDeadlineDate)
 	sb.Write(ss.roleCounterSQL("Admin", "admins", true)+``, activeUserDeadlineDate)

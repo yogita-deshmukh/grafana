@@ -31,7 +31,7 @@ func (ss *SqlStore) DeleteAlertNotification(cmd *models.DeleteAlertNotificationC
 
 func (ss *SqlStore) DeleteAlertNotificationWithUid(cmd *models.DeleteAlertNotificationWithUidCommand) error {
 	existingNotification := &models.GetAlertNotificationsWithUidQuery{OrgId: cmd.OrgId, Uid: cmd.Uid}
-	if err := getAlertNotificationWithUidInternal(existingNotification, newSession()); err != nil {
+	if err := getAlertNotificationWithUidInternal(existingNotification, ss.NewSession()); err != nil {
 		return err
 	}
 
@@ -49,7 +49,7 @@ func (ss *SqlStore) DeleteAlertNotificationWithUid(cmd *models.DeleteAlertNotifi
 }
 
 func (ss *SqlStore) GetAlertNotifications(query *models.GetAlertNotificationsQuery) error {
-	return getAlertNotificationInternal(query, newSession())
+	return getAlertNotificationInternal(query, ss.NewSession())
 }
 
 func (ss *SqlStore) addAlertNotificationUidByIdHandler() {
@@ -64,7 +64,7 @@ func (ss *SqlStore) GetAlertNotificationUidWithId(query *models.GetAlertNotifica
 		return nil
 	}
 
-	err := getAlertNotificationUidInternal(query, newSession())
+	err := getAlertNotificationUidInternal(query, ss.NewSession())
 	if err != nil {
 		return err
 	}
@@ -79,12 +79,12 @@ func newAlertNotificationUidCacheKey(orgID, notificationId int64) string {
 }
 
 func (ss *SqlStore) GetAlertNotificationsWithUid(query *models.GetAlertNotificationsWithUidQuery) error {
-	return getAlertNotificationWithUidInternal(query, newSession())
+	return getAlertNotificationWithUidInternal(query, ss.NewSession())
 }
 
 func (ss *SqlStore) GetAllAlertNotifications(query *models.GetAllAlertNotificationsQuery) error {
 	results := make([]*models.AlertNotification, 0)
-	if err := x.Where("org_id = ?", query.OrgId).Find(&results); err != nil {
+	if err := ss.engine.Where("org_id = ?", query.OrgId).Find(&results); err != nil {
 		return err
 	}
 
@@ -117,7 +117,7 @@ func (ss *SqlStore) GetAlertNotificationsWithUidToSend(query *models.GetAlertNot
 	params = append(params, query.OrgId)
 
 	sql.WriteString(` AND ((alert_notification.is_default = ?)`)
-	params = append(params, dialect.BooleanStr(true))
+	params = append(params, ss.Dialect.BooleanStr(true))
 
 	if len(query.Uids) > 0 {
 		sql.WriteString(` OR alert_notification.uid IN (?` + strings.Repeat(",?", len(query.Uids)-1) + ")")
@@ -128,7 +128,7 @@ func (ss *SqlStore) GetAlertNotificationsWithUidToSend(query *models.GetAlertNot
 	sql.WriteString(`)`)
 
 	results := make([]*models.AlertNotification, 0)
-	if err := x.SQL(sql.String(), params...).Find(&results); err != nil {
+	if err := ss.engine.SQL(sql.String(), params...).Find(&results); err != nil {
 		return err
 	}
 
@@ -410,7 +410,7 @@ func (ss *SqlStore) UpdateAlertNotification(cmd *models.UpdateAlertNotificationC
 func (ss *SqlStore) UpdateAlertNotificationWithUid(cmd *models.UpdateAlertNotificationWithUidCommand) error {
 	getAlertNotificationWithUidQuery := &models.GetAlertNotificationsWithUidQuery{OrgId: cmd.OrgId, Uid: cmd.Uid}
 
-	if err := getAlertNotificationWithUidInternal(getAlertNotificationWithUidQuery, newSession()); err != nil {
+	if err := getAlertNotificationWithUidInternal(getAlertNotificationWithUidQuery, ss.NewSession()); err != nil {
 		return err
 	}
 
@@ -478,7 +478,7 @@ func (ss *SqlStore) SetAlertNotificationStateToCompleteCommand(ctx context.Conte
 }
 
 func (ss *SqlStore) SetAlertNotificationStateToPendingCommand(ctx context.Context, cmd *models.SetAlertNotificationStateToPendingCommand) error {
-	return withDbSession(ctx, func(sess *DBSession) error {
+	return ss.WithDbSession(ctx, func(sess *DBSession) error {
 		newVersion := cmd.Version + 1
 		sql := `UPDATE alert_notification_state SET
 			state = ?,
@@ -538,13 +538,11 @@ func (ss *SqlStore) GetOrCreateAlertNotificationState(ctx context.Context, cmd *
 		}
 
 		if _, err := sess.Insert(notificationState); err != nil {
-			if dialect.IsUniqueConstraintViolation(err) {
+			if ss.Dialect.IsUniqueConstraintViolation(err) {
 				exist, err = getAlertNotificationState(sess, cmd, nj)
-
 				if err != nil {
 					return err
 				}
-
 				if !exist {
 					return errors.New("Should not happen")
 				}

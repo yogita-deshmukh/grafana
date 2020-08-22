@@ -316,7 +316,9 @@ func createDummyAcl(dashboardPermission *DashboardPermission, search Search, das
 }
 
 func getDashboards(sqlStore *SqlStore, search Search, aclUserId int64) ([]*dashboardResponse, error) {
-	builder := &SqlBuilder{}
+	builder := &SqlBuilder{
+		dialect: sqlStore.Dialect,
+	}
 	signedInUser := &models.SignedInUser{
 		UserId: 9999999999,
 	}

@@ -25,7 +25,7 @@ func (ss *SqlStore) GetPluginSettings(query *models.GetPluginSettingsQuery) erro
 
 func (ss *SqlStore) GetPluginSettingById(query *models.GetPluginSettingByIdQuery) error {
 	pluginSetting := models.PluginSetting{OrgId: query.OrgId, PluginId: query.PluginId}
-	has, err := x.Get(&pluginSetting)
+	has, err := ss.engine.Get(&pluginSetting)
 	if err != nil {
 		return err
 	} else if !has {

@@ -31,9 +31,6 @@ import (
 )
 
 var (
-	x       *xorm.Engine
-	dialect migrator.Dialect
-
 	sqlog log.Logger = log.New("sqlstore")
 )
 
@@ -87,7 +84,7 @@ func New() (*SqlStore, error) {
 	}
 
 	log.Debug("Creating database connection", "connStr", connStr)
-	engine, err := xorm.NewEngine(dbType, sec.Key("connection_string").String())
+	engine, err := xorm.NewEngine(dbType, connStr)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +120,6 @@ func New() (*SqlStore, error) {
 	// Register handlers
 	ss.addUserQueryAndCommandHandlers()
 	ss.addAlertNotificationUidByIdHandler()
-
 	ss.addHandlers()
 
 	return ss, nil
@@ -178,10 +174,65 @@ func (ss *SqlStore) addHandlers() {
 	ss.addUserAuthHandlers()
 }
 
+func (ss *SqlStore) createMigrationsTable() error {
+	sess := ss.engine.NewSession()
+	defer sess.Close()
+
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+
+	sql := "CREATE TABLE IF NOT EXISTS `migration_log` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `migration_id` TEXT NOT NULL, `sql` TEXT NOT NULL, `success` INTEGER NOT NULL, `error` TEXT NOT NULL, `timestamp` DATETIME NOT NULL);"
+	ss.log.Info("Creating migrations table", "sql", sql)
+	if _, err := sess.Exec(sql); err != nil {
+		ss.log.Error("An error happened creating migrations table", "err", err)
+		if err := sess.Rollback(); err != nil {
+			return fmt.Errorf("rollback failed: %w", err)
+		}
+
+		return fmt.Errorf("failed to execute SQL %q: %w", sql, err)
+	}
+
+	ss.log.Info("Querying migration_log #1")
+	results, err := sess.SQL("select id from `migration_log`").Query()
+	if err != nil {
+		ss.log.Error("Querying migration_log #1 failed", "error", err)
+		return err
+	}
+
+	ss.log.Info("Got results from migration_log", "results", results)
+
+	if err := sess.Commit(); err != nil {
+		ss.log.Error("Committing transaction failed", "err", err)
+		return err
+	}
+
+	sess.Close()
+	sess = ss.engine.NewSession()
+	defer sess.Close()
+
+	ss.log.Info("Querying migration_log #2")
+	results, err = sess.SQL("select id from `migration_log`").Query()
+	if err != nil {
+		ss.log.Error("Querying migration_log #2 failed", "error", err)
+		return err
+	}
+
+	ss.log.Info("Got results from migration_log", "results", results)
+	return nil
+}
+
 // Reset resets the state of the database.
 func (ss *SqlStore) Reset() error {
 	ss.log.Debug("Resetting database")
-	if err := ss.Dialect.CleanDB(); err != nil {
+	/*
+		if err := ss.Dialect.CleanDB(); err != nil {
+			return err
+		}
+	*/
+
+	if err := ss.createMigrationsTable(); err != nil {
+		ss.log.Error("Creating migrations table failed", "err", err)
 		return err
 	}
 
@@ -221,10 +272,6 @@ func (ss *SqlStore) Init() error {
 
 	ss.engine = engine
 	ss.Dialect = migrator.NewDialect(ss.engine)
-
-	// temporarily still set global var
-	x = engine
-	dialect = ss.Dialect
 
 	migrator := migrator.NewMigrator(engine)
 	migrations.AddMigrations(migrator)
@@ -562,9 +609,6 @@ func InitTestDB(t ITestDB) *SqlStore {
 	require.NoError(t, err, "Failed to init test database")
 
 	sqlstore.Dialect = migrator.NewDialect(engine)
-
-	// temp global var until we get rid of global vars
-	dialect = sqlstore.Dialect
 
 	t.Logf("Cleaning DB")
 	err = sqlstore.Dialect.CleanDB()

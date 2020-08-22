@@ -152,7 +152,8 @@ func (ss *SqlStore) AddDataSource(cmd *models.AddDataSourceCommand) error {
 		}
 
 		if _, err := sess.Insert(ds); err != nil {
-			if dialect.IsUniqueConstraintViolation(err) && strings.Contains(strings.ToLower(dialect.ErrorMessage(err)), "uid") {
+			if ss.Dialect.IsUniqueConstraintViolation(err) && strings.Contains(
+				strings.ToLower(ss.Dialect.ErrorMessage(err)), "uid") {
 				return models.ErrDataSourceUidExists
 			}
 			return err

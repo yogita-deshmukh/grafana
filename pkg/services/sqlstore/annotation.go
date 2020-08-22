@@ -122,6 +122,7 @@ func (r *SqlAnnotationRepo) Update(item *annotations.Item) error {
 func (r *SqlAnnotationRepo) Find(query *annotations.ItemQuery) ([]*annotations.ItemDTO, error) {
 	var sql bytes.Buffer
 	params := make([]interface{}, 0)
+	dialect := r.ss.Dialect
 
 	sql.WriteString(`
 		SELECT
@@ -142,7 +143,7 @@ func (r *SqlAnnotationRepo) Find(query *annotations.ItemQuery) ([]*annotations.I
 			usr.login,
 			alert.name as alert_name
 		FROM annotation
-		LEFT OUTER JOIN ` + dialect.Quote("user") + ` as usr on usr.id = annotation.user_id
+		LEFT OUTER JOIN ` + r.ss.Dialect.Quote("user") + ` as usr on usr.id = annotation.user_id
 		LEFT OUTER JOIN alert on alert.id = annotation.alert_id
 		INNER JOIN (
 			SELECT a.id from annotation a
@@ -229,7 +230,7 @@ func (r *SqlAnnotationRepo) Find(query *annotations.ItemQuery) ([]*annotations.I
 
 	items := make([]*annotations.ItemDTO, 0)
 
-	if err := x.SQL(sql.String(), params...).Find(&items); err != nil {
+	if err := r.ss.engine.SQL(sql.String(), params...).Find(&items); err != nil {
 		return nil, err
 	}
 

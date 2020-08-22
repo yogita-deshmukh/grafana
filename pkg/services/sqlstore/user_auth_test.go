@@ -13,7 +13,7 @@ import (
 
 //nolint:goconst
 func TestUserAuth(t *testing.T) {
-	InitTestDB(t)
+	ss := InitTestDB(t)
 
 	Convey("Given 5 users", t, func() {
 		var err error
@@ -29,13 +29,13 @@ func TestUserAuth(t *testing.T) {
 		}
 
 		Reset(func() {
-			_, err := x.Exec("DELETE FROM org_user WHERE 1=1")
+			_, err := ss.engine.Exec("DELETE FROM org_user WHERE 1=1")
 			So(err, ShouldBeNil)
-			_, err = x.Exec("DELETE FROM org WHERE 1=1")
+			_, err = ss.engine.Exec("DELETE FROM org WHERE 1=1")
 			So(err, ShouldBeNil)
-			_, err = x.Exec("DELETE FROM " + dialect.Quote("user") + " WHERE 1=1")
+			_, err = ss.engine.Exec("DELETE FROM " + dialect.Quote("user") + " WHERE 1=1")
 			So(err, ShouldBeNil)
-			_, err = x.Exec("DELETE FROM user_auth WHERE 1=1")
+			_, err = ss.engine.Exec("DELETE FROM user_auth WHERE 1=1")
 			So(err, ShouldBeNil)
 		})
 
@@ -118,7 +118,7 @@ func TestUserAuth(t *testing.T) {
 			So(query.Result.Login, ShouldEqual, "loginuser1")
 
 			// remove user
-			_, err = x.Exec("DELETE FROM "+dialect.Quote("user")+" WHERE id=?", query.Result.Id)
+			_, err = ss.engine.Exec("DELETE FROM "+dialect.Quote("user")+" WHERE id=?", query.Result.Id)
 			So(err, ShouldBeNil)
 
 			// get via user_auth for deleted user
