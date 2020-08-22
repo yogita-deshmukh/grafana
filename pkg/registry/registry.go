@@ -30,7 +30,6 @@ func Register(descriptor *Descriptor) {
 
 func GetServices() []*Descriptor {
 	slice := getServicesWithOverrides()
-
 	sort.Slice(slice, func(i, j int) bool {
 		return slice[i].InitPriority > slice[j].InitPriority
 	})

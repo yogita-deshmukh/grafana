@@ -58,6 +58,7 @@ type SqlStore struct {
 	Bus          bus.Bus                  `inject:""`
 	CacheService *localcache.CacheService `inject:""`
 
+	isInitialized               bool
 	dbCfg                       DatabaseConfig
 	engine                      *xorm.Engine
 	log                         log.Logger
@@ -103,6 +104,7 @@ func New() (*SqlStore, error) {
 	}
 
 	ss := &SqlStore{
+		engine:                      engine,
 		Bus:                         bus.New(),
 		CacheService:                localcache.New(5*time.Minute, 10*time.Minute),
 		skipEnsureDefaultOrgAndUser: true,
@@ -110,22 +112,75 @@ func New() (*SqlStore, error) {
 		Dialect:                     migrator.NewDialect(engine),
 		log:                         log,
 		migrator:                    m,
+		isInitialized:               true,
 	}
 	ss.readConfig()
 
 	// Init repo instances
-	annotations.SetRepository(&SqlAnnotationRepo{})
+	annotations.SetRepository(&SqlAnnotationRepo{ss: ss})
 	ss.Bus.SetTransactionManager(ss)
 
 	// Register handlers
 	ss.addUserQueryAndCommandHandlers()
 	ss.addAlertNotificationUidByIdHandler()
 
+	ss.addHandlers()
+
 	return ss, nil
+}
+
+func (ss *SqlStore) addHandlers() {
+	bus.AddHandler("sql", ss.GetSystemStats)
+	bus.AddHandler("sql", ss.GetDataSourceStats)
+	bus.AddHandler("sql", ss.GetDataSourceAccessStats)
+	bus.AddHandler("sql", ss.GetAdminStats)
+	bus.AddHandler("sql", ss.GetActiveUserStats)
+	bus.AddHandlerCtx("sql", ss.GetAlertNotifiersUsageStats)
+	bus.AddHandlerCtx("sql", ss.GetSystemUserCountStats)
+
+	bus.AddHandler("sql", ss.GetPluginSettings)
+	bus.AddHandler("sql", ss.GetPluginSettingById)
+	bus.AddHandler("sql", ss.UpdatePluginSetting)
+	bus.AddHandler("sql", ss.UpdatePluginSettingVersion)
+
+	bus.AddHandler("sql", ss.GetDBHealthQuery)
+
+	bus.AddHandler("sql", ss.CreateTempUser)
+	bus.AddHandler("sql", ss.GetTempUsersQuery)
+	bus.AddHandler("sql", ss.UpdateTempUserStatus)
+	bus.AddHandler("sql", ss.GetTempUserByCode)
+	bus.AddHandler("sql", ss.UpdateTempUserWithEmailSent)
+
+	bus.AddHandler("sql", ss.GetAlertNotifications)
+	bus.AddHandler("sql", ss.CreateAlertNotificationCommand)
+	bus.AddHandler("sql", ss.UpdateAlertNotification)
+	bus.AddHandler("sql", ss.DeleteAlertNotification)
+	bus.AddHandler("sql", ss.GetAllAlertNotifications)
+	bus.AddHandlerCtx("sql", ss.GetOrCreateAlertNotificationState)
+	bus.AddHandlerCtx("sql", ss.SetAlertNotificationStateToCompleteCommand)
+	bus.AddHandlerCtx("sql", ss.SetAlertNotificationStateToPendingCommand)
+
+	bus.AddHandler("sql", ss.GetAlertNotificationsWithUid)
+	bus.AddHandler("sql", ss.UpdateAlertNotificationWithUid)
+	bus.AddHandler("sql", ss.DeleteAlertNotificationWithUid)
+	bus.AddHandler("sql", ss.GetAlertNotificationsWithUidToSend)
+
+	ss.addUserQueryAndCommandHandlers()
+	ss.addAlertNotificationUidByIdHandler()
+	ss.addDashboardHandlers()
+	ss.addLoginAttemptHandlers()
+	ss.addOrgHandlers()
+	ss.addPreferencesHandlers()
+	ss.addQuotaHandlers()
+	ss.addAlertHandlers()
+	ss.addAPIKeyHandlers()
+	ss.addTeamHandlers()
+	ss.addUserAuthHandlers()
 }
 
 // Reset resets the state of the database.
 func (ss *SqlStore) Reset() error {
+	ss.log.Debug("Resetting database")
 	if err := ss.Dialect.CleanDB(); err != nil {
 		return err
 	}
@@ -133,19 +188,29 @@ func (ss *SqlStore) Reset() error {
 	if err := ss.migrator.Start(); err != nil {
 		return errutil.Wrap("migrating database failed", err)
 	}
+	ss.log.Debug("Migrating database succeeded")
 
-	if err := ss.logOrgsNotice(); err != nil {
+	if err := ss.WithDbSession(context.Background(), func(session *DBSession) error {
+		resp := make([]*targetCount, 0)
+		if err := session.SQL("select count(id) from data_source").Find(&resp); err != nil {
+			ss.log.Error("Counting number of sources failed", "err", err)
+			return err
+		}
+		ss.log.Info("The number of sources", "num", resp[0].Count)
+		return nil
+	}); err != nil {
 		return err
 	}
 
-	if ss.skipEnsureDefaultOrgAndUser {
-		return nil
-	}
-
-	return ss.ensureMainOrgAndAdminUser()
+	return nil
 }
 
 func (ss *SqlStore) Init() error {
+	if ss.isInitialized {
+		return nil
+	}
+	ss.isInitialized = true
+
 	ss.log = log.New("sqlstore")
 	ss.readConfig()
 
@@ -176,12 +241,10 @@ func (ss *SqlStore) Init() error {
 	}
 
 	// Init repo instances
-	annotations.SetRepository(&SqlAnnotationRepo{})
+	annotations.SetRepository(&SqlAnnotationRepo{ss: ss})
 	ss.Bus.SetTransactionManager(ss)
 
-	// Register handlers
-	ss.addUserQueryAndCommandHandlers()
-	ss.addAlertNotificationUidByIdHandler()
+	ss.addHandlers()
 
 	err = ss.logOrgsNotice()
 	if err != nil {
@@ -201,11 +264,14 @@ func (ss *SqlStore) logOrgsNotice() error {
 	}
 
 	return ss.WithDbSession(context.Background(), func(session *DBSession) error {
+		ss.log.Debug("Counting number of orgs")
 		resp := make([]*targetCount, 0)
-		if err := session.SQL("select count(id) as Count from org").Find(&resp); err != nil {
+		if err := session.SQL("select count(id) from org").Find(&resp); err != nil {
+			ss.log.Error("Counting number of orgs failed", "err", err)
 			return err
 		}
 
+		ss.log.Debug("Counted number of orgs", "count", resp[0].Count)
 		if resp[0].Count > 1 {
 			ss.log.Warn(`[Deprecation notice]`)
 			ss.log.Warn(`Fewer than 1% of Grafana installations use organizations, and we feel that most of those`)
@@ -220,6 +286,8 @@ func (ss *SqlStore) logOrgsNotice() error {
 }
 
 func (ss *SqlStore) ensureMainOrgAndAdminUser() error {
+	ss.log.Debug("Ensuring main org and admin user")
+
 	err := ss.InTransaction(context.Background(), func(ctx context.Context) error {
 		systemUserCountQuery := models.GetSystemUserCountStatsQuery{}
 		err := bus.DispatchCtx(ctx, &systemUserCountQuery)
@@ -248,7 +316,7 @@ func (ss *SqlStore) ensureMainOrgAndAdminUser() error {
 		}
 
 		// ensure default org if default admin user is disabled
-		if err := createDefaultOrg(ctx); err != nil {
+		if err := ss.createDefaultOrg(ctx); err != nil {
 			return errutil.Wrap("Failed to create default organization", err)
 		}
 

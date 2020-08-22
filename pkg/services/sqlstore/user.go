@@ -18,22 +18,22 @@ import (
 func (ss *SqlStore) addUserQueryAndCommandHandlers() {
 	ss.Bus.AddHandler(ss.GetSignedInUserWithCache)
 
-	bus.AddHandler("sql", GetUserById)
-	bus.AddHandler("sql", UpdateUser)
-	bus.AddHandler("sql", ChangeUserPassword)
-	bus.AddHandler("sql", GetUserByLogin)
-	bus.AddHandler("sql", GetUserByEmail)
-	bus.AddHandler("sql", SetUsingOrg)
-	bus.AddHandler("sql", UpdateUserLastSeenAt)
-	bus.AddHandler("sql", GetUserProfile)
-	bus.AddHandler("sql", SearchUsers)
-	bus.AddHandler("sql", GetUserOrgList)
-	bus.AddHandler("sql", DisableUser)
-	bus.AddHandler("sql", BatchDisableUsers)
-	bus.AddHandler("sql", DeleteUser)
-	bus.AddHandler("sql", UpdateUserPermissions)
-	bus.AddHandler("sql", SetUserHelpFlag)
-	bus.AddHandlerCtx("sql", CreateUser)
+	bus.AddHandler("sql", ss.GetUserById)
+	bus.AddHandler("sql", ss.UpdateUser)
+	bus.AddHandler("sql", ss.ChangeUserPassword)
+	bus.AddHandler("sql", ss.GetUserByLogin)
+	bus.AddHandler("sql", ss.GetUserByEmail)
+	bus.AddHandler("sql", ss.SetUsingOrg)
+	bus.AddHandler("sql", ss.UpdateUserLastSeenAt)
+	bus.AddHandler("sql", ss.GetUserProfile)
+	bus.AddHandler("sql", ss.SearchUsers)
+	bus.AddHandler("sql", ss.GetUserOrgList)
+	bus.AddHandler("sql", ss.DisableUser)
+	bus.AddHandler("sql", ss.BatchDisableUsers)
+	bus.AddHandler("sql", ss.DeleteUser)
+	bus.AddHandler("sql", ss.UpdateUserPermissions)
+	bus.AddHandler("sql", ss.SetUserHelpFlag)
+	bus.AddHandlerCtx("sql", ss.CreateUser)
 }
 
 func getOrgIdForNewUser(sess *DBSession, cmd *models.CreateUserCommand) (int64, error) {
@@ -57,8 +57,8 @@ func getOrgIdForNewUser(sess *DBSession, cmd *models.CreateUserCommand) (int64, 
 	return getOrCreateOrg(sess, orgName)
 }
 
-func CreateUser(ctx context.Context, cmd *models.CreateUserCommand) error {
-	return inTransactionCtx(ctx, func(sess *DBSession) error {
+func (ss *SqlStore) CreateUser(ctx context.Context, cmd *models.CreateUserCommand) error {
+	return ss.inTransactionCtx(ctx, func(sess *DBSession) error {
 		orgId, err := getOrgIdForNewUser(sess, cmd)
 		if err != nil {
 			return err
@@ -150,9 +150,9 @@ func CreateUser(ctx context.Context, cmd *models.CreateUserCommand) error {
 	})
 }
 
-func GetUserById(query *models.GetUserByIdQuery) error {
+func (ss *SqlStore) GetUserById(query *models.GetUserByIdQuery) error {
 	user := new(models.User)
-	has, err := x.Id(query.Id).Get(user)
+	has, err := ss.engine.Id(query.Id).Get(user)
 
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func GetUserById(query *models.GetUserByIdQuery) error {
 	return nil
 }
 
-func GetUserByLogin(query *models.GetUserByLoginQuery) error {
+func (ss *SqlStore) GetUserByLogin(query *models.GetUserByLoginQuery) error {
 	if query.LoginOrEmail == "" {
 		return models.ErrUserNotFound
 	}
@@ -173,7 +173,7 @@ func GetUserByLogin(query *models.GetUserByLoginQuery) error {
 	// Try and find the user by login first.
 	// It's not sufficient to assume that a LoginOrEmail with an "@" is an email.
 	user := &models.User{Login: query.LoginOrEmail}
-	has, err := x.Get(user)
+	has, err := ss.engine.Get(user)
 
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func GetUserByLogin(query *models.GetUserByLoginQuery) error {
 		// If the user wasn't found, and it contains an "@" fallback to finding the
 		// user by email.
 		user = &models.User{Email: query.LoginOrEmail}
-		has, err = x.Get(user)
+		has, err = ss.engine.Get(user)
 	}
 
 	if err != nil {
@@ -197,13 +197,13 @@ func GetUserByLogin(query *models.GetUserByLoginQuery) error {
 	return nil
 }
 
-func GetUserByEmail(query *models.GetUserByEmailQuery) error {
+func (ss *SqlStore) GetUserByEmail(query *models.GetUserByEmailQuery) error {
 	if query.Email == "" {
 		return models.ErrUserNotFound
 	}
 
 	user := &models.User{Email: query.Email}
-	has, err := x.Get(user)
+	has, err := ss.engine.Get(user)
 
 	if err != nil {
 		return err
@@ -216,8 +216,8 @@ func GetUserByEmail(query *models.GetUserByEmailQuery) error {
 	return nil
 }
 
-func UpdateUser(cmd *models.UpdateUserCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateUser(cmd *models.UpdateUserCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		user := models.User{
 			Name:    cmd.Name,
 			Email:   cmd.Email,
@@ -242,8 +242,8 @@ func UpdateUser(cmd *models.UpdateUserCommand) error {
 	})
 }
 
-func ChangeUserPassword(cmd *models.ChangeUserPasswordCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) ChangeUserPassword(cmd *models.ChangeUserPasswordCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		user := models.User{
 			Password: cmd.NewPassword,
 			Updated:  time.Now(),
@@ -254,8 +254,8 @@ func ChangeUserPassword(cmd *models.ChangeUserPasswordCommand) error {
 	})
 }
 
-func UpdateUserLastSeenAt(cmd *models.UpdateUserLastSeenAtCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateUserLastSeenAt(cmd *models.UpdateUserLastSeenAtCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		user := models.User{
 			Id:         cmd.UserId,
 			LastSeenAt: time.Now(),
@@ -266,9 +266,9 @@ func UpdateUserLastSeenAt(cmd *models.UpdateUserLastSeenAtCommand) error {
 	})
 }
 
-func SetUsingOrg(cmd *models.SetUsingOrgCommand) error {
+func (ss *SqlStore) SetUsingOrg(cmd *models.SetUsingOrgCommand) error {
 	getOrgsForUserCmd := &models.GetUserOrgListQuery{UserId: cmd.UserId}
-	if err := GetUserOrgList(getOrgsForUserCmd); err != nil {
+	if err := ss.GetUserOrgList(getOrgsForUserCmd); err != nil {
 		return err
 	}
 
@@ -282,7 +282,7 @@ func SetUsingOrg(cmd *models.SetUsingOrgCommand) error {
 		return fmt.Errorf("user does not belong to org")
 	}
 
-	return inTransaction(func(sess *DBSession) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		return setUsingOrgInTransaction(sess, cmd.UserId, cmd.OrgId)
 	})
 }
@@ -297,9 +297,9 @@ func setUsingOrgInTransaction(sess *DBSession, userID int64, orgID int64) error 
 	return err
 }
 
-func GetUserProfile(query *models.GetUserProfileQuery) error {
+func (ss *SqlStore) GetUserProfile(query *models.GetUserProfileQuery) error {
 	var user models.User
-	has, err := x.Id(query.UserId).Get(&user)
+	has, err := ss.engine.Id(query.UserId).Get(&user)
 
 	if err != nil {
 		return err
@@ -344,9 +344,9 @@ func (o byOrgName) Less(i, j int) bool {
 	return o[i].Name < o[j].Name
 }
 
-func GetUserOrgList(query *models.GetUserOrgListQuery) error {
+func (ss *SqlStore) GetUserOrgList(query *models.GetUserOrgListQuery) error {
 	query.Result = make([]*models.UserOrgDTO, 0)
-	sess := x.Table("org_user")
+	sess := ss.engine.Table("org_user")
 	sess.Join("INNER", "org", "org_user.org_id=org.id")
 	sess.Where("org_user.user_id=?", query.UserId)
 	sess.Cols("org.name", "org_user.role", "org_user.org_id")
@@ -367,7 +367,7 @@ func (ss *SqlStore) GetSignedInUserWithCache(query *models.GetSignedInUserQuery)
 		return nil
 	}
 
-	err := GetSignedInUser(query)
+	err := ss.GetSignedInUser(query)
 	if err != nil {
 		return err
 	}
@@ -377,7 +377,8 @@ func (ss *SqlStore) GetSignedInUserWithCache(query *models.GetSignedInUserQuery)
 	return nil
 }
 
-func GetSignedInUser(query *models.GetSignedInUserQuery) error {
+func (ss *SqlStore) GetSignedInUser(query *models.GetSignedInUserQuery) error {
+	dialect := ss.Dialect
 	orgId := "u.org_id"
 	if query.OrgId > 0 {
 		orgId = strconv.FormatInt(query.OrgId, 10)
@@ -399,7 +400,7 @@ func GetSignedInUser(query *models.GetSignedInUserQuery) error {
 		LEFT OUTER JOIN org_user on org_user.org_id = ` + orgId + ` and org_user.user_id = u.id
 		LEFT OUTER JOIN org on org.id = org_user.org_id `
 
-	sess := x.Table("user")
+	sess := ss.engine.Table("user")
 	switch {
 	case query.UserId > 0:
 		sess.SQL(rawSql+"WHERE u.id=?", query.UserId)
@@ -423,8 +424,7 @@ func GetSignedInUser(query *models.GetSignedInUserQuery) error {
 	}
 
 	getTeamsByUserQuery := &models.GetTeamsByUserQuery{OrgId: user.OrgId, UserId: user.UserId}
-	err = GetTeamsByUser(getTeamsByUserQuery)
-	if err != nil {
+	if err := ss.GetTeamsByUser(getTeamsByUserQuery); err != nil {
 		return err
 	}
 
@@ -437,7 +437,9 @@ func GetSignedInUser(query *models.GetSignedInUserQuery) error {
 	return err
 }
 
-func SearchUsers(query *models.SearchUsersQuery) error {
+func (ss *SqlStore) SearchUsers(query *models.SearchUsersQuery) error {
+	dialect := ss.Dialect
+
 	query.Result = models.SearchUserQueryResult{
 		Users: make([]*models.UserSearchHitDTO, 0),
 	}
@@ -446,7 +448,7 @@ func SearchUsers(query *models.SearchUsersQuery) error {
 
 	whereConditions := make([]string, 0)
 	whereParams := make([]interface{}, 0)
-	sess := x.Table("user").Alias("u")
+	sess := ss.engine.Table("user").Alias("u")
 
 	// Join with only most recent auth module
 	joinCondition := `(
@@ -490,7 +492,7 @@ func SearchUsers(query *models.SearchUsersQuery) error {
 
 	// get total
 	user := models.User{}
-	countSess := x.Table("user").Alias("u")
+	countSess := ss.engine.Table("user").Alias("u")
 
 	// Join with user_auth table if users filtered by auth_module
 	if query.AuthModule != "" {
@@ -511,9 +513,9 @@ func SearchUsers(query *models.SearchUsersQuery) error {
 	return err
 }
 
-func DisableUser(cmd *models.DisableUserCommand) error {
+func (ss *SqlStore) DisableUser(cmd *models.DisableUserCommand) error {
 	user := models.User{}
-	sess := x.Table("user")
+	sess := ss.engine.Table("user")
 
 	if has, err := sess.ID(cmd.UserId).Get(&user); err != nil {
 		return err
@@ -528,8 +530,10 @@ func DisableUser(cmd *models.DisableUserCommand) error {
 	return err
 }
 
-func BatchDisableUsers(cmd *models.BatchDisableUsersCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) BatchDisableUsers(cmd *models.BatchDisableUsersCommand) error {
+	dialect := ss.Dialect
+
+	return ss.inTransaction(func(sess *DBSession) error {
 		userIds := cmd.UserIds
 
 		if len(userIds) == 0 {
@@ -553,13 +557,15 @@ func BatchDisableUsers(cmd *models.BatchDisableUsersCommand) error {
 	})
 }
 
-func DeleteUser(cmd *models.DeleteUserCommand) error {
-	return inTransaction(func(sess *DBSession) error {
-		return deleteUserInTransaction(sess, cmd)
+func (ss *SqlStore) DeleteUser(cmd *models.DeleteUserCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
+		return ss.deleteUserInTransaction(sess, cmd)
 	})
 }
 
-func deleteUserInTransaction(sess *DBSession, cmd *models.DeleteUserCommand) error {
+func (ss *SqlStore) deleteUserInTransaction(sess *DBSession, cmd *models.DeleteUserCommand) error {
+	dialect := ss.Dialect
+
 	//Check if user exists
 	user := models.User{Id: cmd.UserId}
 	has, err := sess.Get(&user)
@@ -592,8 +598,8 @@ func deleteUserInTransaction(sess *DBSession, cmd *models.DeleteUserCommand) err
 	return nil
 }
 
-func UpdateUserPermissions(cmd *models.UpdateUserPermissionsCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateUserPermissions(cmd *models.UpdateUserPermissionsCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		user := models.User{}
 		if _, err := sess.ID(cmd.UserId).Get(&user); err != nil {
 			return err
@@ -616,8 +622,8 @@ func UpdateUserPermissions(cmd *models.UpdateUserPermissionsCommand) error {
 	})
 }
 
-func SetUserHelpFlag(cmd *models.SetUserHelpFlagCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) SetUserHelpFlag(cmd *models.SetUserHelpFlagCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		user := models.User{
 			Id:         cmd.UserId,
 			HelpFlags1: cmd.HelpFlags1,

@@ -9,36 +9,37 @@ import (
 	"github.com/grafana/grafana/pkg/setting"
 )
 
-func init() {
-	bus.AddHandler("sql", GetOrgQuotaByTarget)
-	bus.AddHandler("sql", GetOrgQuotas)
-	bus.AddHandler("sql", UpdateOrgQuota)
-	bus.AddHandler("sql", GetUserQuotaByTarget)
-	bus.AddHandler("sql", GetUserQuotas)
-	bus.AddHandler("sql", UpdateUserQuota)
-	bus.AddHandler("sql", GetGlobalQuotaByTarget)
+func (ss *SqlStore) addQuotaHandlers() {
+	bus.AddHandler("sql", ss.GetOrgQuotaByTarget)
+	bus.AddHandler("sql", ss.GetOrgQuotas)
+	bus.AddHandler("sql", ss.UpdateOrgQuota)
+	bus.AddHandler("sql", ss.GetUserQuotaByTarget)
+	bus.AddHandler("sql", ss.GetUserQuotas)
+	bus.AddHandler("sql", ss.UpdateUserQuota)
+	bus.AddHandler("sql", ss.GetGlobalQuotaByTarget)
 }
 
 type targetCount struct {
 	Count int64
 }
 
-func GetOrgQuotaByTarget(query *models.GetOrgQuotaByTargetQuery) error {
+func (ss *SqlStore) GetOrgQuotaByTarget(query *models.GetOrgQuotaByTargetQuery) error {
 	quota := models.Quota{
 		Target: query.Target,
 		OrgId:  query.OrgId,
 	}
-	has, err := x.Get(&quota)
+	has, err := ss.engine.Get(&quota)
 	if err != nil {
 		return err
-	} else if !has {
+	}
+	if !has {
 		quota.Limit = query.Default
 	}
 
 	//get quota used.
 	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where org_id=?", dialect.Quote(query.Target))
 	resp := make([]*targetCount, 0)
-	if err := x.SQL(rawSql, query.OrgId).Find(&resp); err != nil {
+	if err := ss.engine.SQL(rawSql, query.OrgId).Find(&resp); err != nil {
 		return err
 	}
 
@@ -52,9 +53,9 @@ func GetOrgQuotaByTarget(query *models.GetOrgQuotaByTargetQuery) error {
 	return nil
 }
 
-func GetOrgQuotas(query *models.GetOrgQuotasQuery) error {
+func (ss *SqlStore) GetOrgQuotas(query *models.GetOrgQuotasQuery) error {
 	quotas := make([]*models.Quota, 0)
-	sess := x.Table("quota")
+	sess := ss.engine.Table("quota")
 	if err := sess.Where("org_id=? AND user_id=0", query.OrgId).Find(&quotas); err != nil {
 		return err
 	}
@@ -81,7 +82,7 @@ func GetOrgQuotas(query *models.GetOrgQuotasQuery) error {
 		//get quota used.
 		rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where org_id=?", dialect.Quote(q.Target))
 		resp := make([]*targetCount, 0)
-		if err := x.SQL(rawSql, q.OrgId).Find(&resp); err != nil {
+		if err := ss.engine.SQL(rawSql, q.OrgId).Find(&resp); err != nil {
 			return err
 		}
 		result[i] = &models.OrgQuotaDTO{
@@ -95,8 +96,8 @@ func GetOrgQuotas(query *models.GetOrgQuotasQuery) error {
 	return nil
 }
 
-func UpdateOrgQuota(cmd *models.UpdateOrgQuotaCmd) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateOrgQuota(cmd *models.UpdateOrgQuotaCmd) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		//Check if quota is already defined in the DB
 		quota := models.Quota{
 			Target: cmd.Target,
@@ -126,12 +127,12 @@ func UpdateOrgQuota(cmd *models.UpdateOrgQuotaCmd) error {
 	})
 }
 
-func GetUserQuotaByTarget(query *models.GetUserQuotaByTargetQuery) error {
+func (ss *SqlStore) GetUserQuotaByTarget(query *models.GetUserQuotaByTargetQuery) error {
 	quota := models.Quota{
 		Target: query.Target,
 		UserId: query.UserId,
 	}
-	has, err := x.Get(&quota)
+	has, err := ss.engine.Get(&quota)
 	if err != nil {
 		return err
 	} else if !has {
@@ -141,7 +142,7 @@ func GetUserQuotaByTarget(query *models.GetUserQuotaByTargetQuery) error {
 	//get quota used.
 	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where user_id=?", dialect.Quote(query.Target))
 	resp := make([]*targetCount, 0)
-	if err := x.SQL(rawSql, query.UserId).Find(&resp); err != nil {
+	if err := ss.engine.SQL(rawSql, query.UserId).Find(&resp); err != nil {
 		return err
 	}
 
@@ -155,9 +156,9 @@ func GetUserQuotaByTarget(query *models.GetUserQuotaByTargetQuery) error {
 	return nil
 }
 
-func GetUserQuotas(query *models.GetUserQuotasQuery) error {
+func (ss *SqlStore) GetUserQuotas(query *models.GetUserQuotasQuery) error {
 	quotas := make([]*models.Quota, 0)
-	sess := x.Table("quota")
+	sess := ss.engine.Table("quota")
 	if err := sess.Where("user_id=? AND org_id=0", query.UserId).Find(&quotas); err != nil {
 		return err
 	}
@@ -184,7 +185,7 @@ func GetUserQuotas(query *models.GetUserQuotasQuery) error {
 		//get quota used.
 		rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s where user_id=?", dialect.Quote(q.Target))
 		resp := make([]*targetCount, 0)
-		if err := x.SQL(rawSql, q.UserId).Find(&resp); err != nil {
+		if err := ss.engine.SQL(rawSql, q.UserId).Find(&resp); err != nil {
 			return err
 		}
 		result[i] = &models.UserQuotaDTO{
@@ -198,8 +199,8 @@ func GetUserQuotas(query *models.GetUserQuotasQuery) error {
 	return nil
 }
 
-func UpdateUserQuota(cmd *models.UpdateUserQuotaCmd) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateUserQuota(cmd *models.UpdateUserQuotaCmd) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		//Check if quota is already defined in the DB
 		quota := models.Quota{
 			Target: cmd.Target,
@@ -229,11 +230,11 @@ func UpdateUserQuota(cmd *models.UpdateUserQuotaCmd) error {
 	})
 }
 
-func GetGlobalQuotaByTarget(query *models.GetGlobalQuotaByTargetQuery) error {
+func (ss *SqlStore) GetGlobalQuotaByTarget(query *models.GetGlobalQuotaByTargetQuery) error {
 	//get quota used.
 	rawSql := fmt.Sprintf("SELECT COUNT(*) as count from %s", dialect.Quote(query.Target))
 	resp := make([]*targetCount, 0)
-	if err := x.SQL(rawSql).Find(&resp); err != nil {
+	if err := ss.engine.SQL(rawSql).Find(&resp); err != nil {
 		return err
 	}
 

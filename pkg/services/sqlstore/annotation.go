@@ -31,10 +31,11 @@ func validateTimeRange(item *annotations.Item) error {
 }
 
 type SqlAnnotationRepo struct {
+	ss *SqlStore
 }
 
 func (r *SqlAnnotationRepo) Save(item *annotations.Item) error {
-	return inTransaction(func(sess *DBSession) error {
+	return r.ss.inTransaction(func(sess *DBSession) error {
 		tags := models.ParseTagPairs(item.Tags)
 		item.Tags = models.JoinTagPairs(tags)
 		item.Created = time.Now().UnixNano() / int64(time.Millisecond)
@@ -67,7 +68,7 @@ func (r *SqlAnnotationRepo) Save(item *annotations.Item) error {
 }
 
 func (r *SqlAnnotationRepo) Update(item *annotations.Item) error {
-	return inTransaction(func(sess *DBSession) error {
+	return r.ss.inTransaction(func(sess *DBSession) error {
 		var (
 			isExist bool
 			err     error
@@ -75,7 +76,6 @@ func (r *SqlAnnotationRepo) Update(item *annotations.Item) error {
 		existing := new(annotations.Item)
 
 		isExist, err = sess.Table("annotation").Where("id=? AND org_id=?", item.Id, item.OrgId).Get(existing)
-
 		if err != nil {
 			return err
 		}
@@ -237,7 +237,7 @@ func (r *SqlAnnotationRepo) Find(query *annotations.ItemQuery) ([]*annotations.I
 }
 
 func (r *SqlAnnotationRepo) Delete(params *annotations.DeleteParams) error {
-	return inTransaction(func(sess *DBSession) error {
+	return r.ss.inTransaction(func(sess *DBSession) error {
 		var (
 			sql         string
 			annoTagSql  string

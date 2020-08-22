@@ -63,6 +63,7 @@ require (
 	github.com/rainycape/unidecode v0.0.0-20150907023854-cb7f23ec59be // indirect
 	github.com/robfig/cron v0.0.0-20180505203441-b41be1df6967
 	github.com/robfig/cron/v3 v3.0.0
+	github.com/rs/zerolog v1.19.0
 	github.com/sergi/go-diff v1.0.0 // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337
 	github.com/stretchr/testify v1.5.1

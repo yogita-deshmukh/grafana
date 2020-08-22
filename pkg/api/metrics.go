@@ -9,7 +9,6 @@ import (
 	"github.com/grafana/grafana/pkg/plugins"
 
 	"github.com/grafana/grafana/pkg/api/dtos"
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/components/simplejson"
 	"github.com/grafana/grafana/pkg/tsdb"
 	"github.com/grafana/grafana/pkg/tsdb/testdatasource"
@@ -184,8 +183,8 @@ func GenerateError(c *models.ReqContext) Response {
 }
 
 // GET /api/tsdb/testdata/gensql
-func GenerateSQLTestData(c *models.ReqContext) Response {
-	if err := bus.Dispatch(&models.InsertSqlTestDataCommand{}); err != nil {
+func (hs *HTTPServer) GenerateSQLTestData(c *models.ReqContext) Response {
+	if err := hs.SQLStore.InsertSQLTestData(); err != nil {
 		return Error(500, "Failed to insert test data", err)
 	}
 

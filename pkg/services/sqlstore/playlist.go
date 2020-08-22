@@ -5,23 +5,23 @@ import (
 	"github.com/grafana/grafana/pkg/models"
 )
 
-func init() {
-	bus.AddHandler("sql", CreatePlaylist)
-	bus.AddHandler("sql", UpdatePlaylist)
-	bus.AddHandler("sql", DeletePlaylist)
-	bus.AddHandler("sql", SearchPlaylists)
-	bus.AddHandler("sql", GetPlaylist)
-	bus.AddHandler("sql", GetPlaylistItem)
+func (ss *SqlStore) addPlaylistHandlers() {
+	bus.AddHandler("sql", ss.CreatePlaylist)
+	bus.AddHandler("sql", ss.UpdatePlaylist)
+	bus.AddHandler("sql", ss.DeletePlaylist)
+	bus.AddHandler("sql", ss.SearchPlaylists)
+	bus.AddHandler("sql", ss.GetPlaylist)
+	bus.AddHandler("sql", ss.GetPlaylistItem)
 }
 
-func CreatePlaylist(cmd *models.CreatePlaylistCommand) error {
+func (ss *SqlStore) CreatePlaylist(cmd *models.CreatePlaylistCommand) error {
 	playlist := models.Playlist{
 		Name:     cmd.Name,
 		Interval: cmd.Interval,
 		OrgId:    cmd.OrgId,
 	}
 
-	_, err := x.Insert(&playlist)
+	_, err := ss.engine.Insert(&playlist)
 	if err != nil {
 		return err
 	}
@@ -37,13 +37,13 @@ func CreatePlaylist(cmd *models.CreatePlaylistCommand) error {
 		})
 	}
 
-	_, err = x.Insert(&playlistItems)
+	_, err = ss.engine.Insert(&playlistItems)
 
 	cmd.Result = &playlist
 	return err
 }
 
-func UpdatePlaylist(cmd *models.UpdatePlaylistCommand) error {
+func (ss *SqlStore) UpdatePlaylist(cmd *models.UpdatePlaylistCommand) error {
 	playlist := models.Playlist{
 		Id:       cmd.Id,
 		OrgId:    cmd.OrgId,
@@ -51,7 +51,7 @@ func UpdatePlaylist(cmd *models.UpdatePlaylistCommand) error {
 		Interval: cmd.Interval,
 	}
 
-	existingPlaylist := x.Where("id = ? AND org_id = ?", cmd.Id, cmd.OrgId).Find(models.Playlist{})
+	existingPlaylist := ss.engine.Where("id = ? AND org_id = ?", cmd.Id, cmd.OrgId).Find(models.Playlist{})
 
 	if existingPlaylist == nil {
 		return models.ErrPlaylistNotFound
@@ -64,14 +64,14 @@ func UpdatePlaylist(cmd *models.UpdatePlaylistCommand) error {
 		Interval: playlist.Interval,
 	}
 
-	_, err := x.ID(cmd.Id).Cols("name", "interval").Update(&playlist)
+	_, err := ss.engine.ID(cmd.Id).Cols("name", "interval").Update(&playlist)
 
 	if err != nil {
 		return err
 	}
 
 	rawSql := "DELETE FROM playlist_item WHERE playlist_id = ?"
-	_, err = x.Exec(rawSql, cmd.Id)
+	_, err = ss.engine.Exec(rawSql, cmd.Id)
 
 	if err != nil {
 		return err
@@ -89,30 +89,32 @@ func UpdatePlaylist(cmd *models.UpdatePlaylistCommand) error {
 		})
 	}
 
-	_, err = x.Insert(&playlistItems)
+	_, err = ss.engine.Insert(&playlistItems)
 
 	return err
 }
 
-func GetPlaylist(query *models.GetPlaylistByIdQuery) error {
+func (ss *SqlStore) GetPlaylist(query *models.GetPlaylistByIdQuery) error {
 	if query.Id == 0 {
 		return models.ErrCommandValidationFailed
 	}
 
 	playlist := models.Playlist{}
-	_, err := x.ID(query.Id).Get(&playlist)
+	_, err := ss.engine.ID(query.Id).Get(&playlist)
+	if err != nil {
+		return err
+	}
 
 	query.Result = &playlist
-
-	return err
+	return nil
 }
 
-func DeletePlaylist(cmd *models.DeletePlaylistCommand) error {
+func (ss *SqlStore) DeletePlaylist(cmd *models.DeletePlaylistCommand) error {
 	if cmd.Id == 0 {
 		return models.ErrCommandValidationFailed
 	}
 
-	return inTransaction(func(sess *DBSession) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var rawPlaylistSql = "DELETE FROM playlist WHERE id = ? and org_id = ?"
 		_, err := sess.Exec(rawPlaylistSql, cmd.Id, cmd.OrgId)
 
@@ -127,10 +129,10 @@ func DeletePlaylist(cmd *models.DeletePlaylistCommand) error {
 	})
 }
 
-func SearchPlaylists(query *models.GetPlaylistsQuery) error {
+func (ss *SqlStore) SearchPlaylists(query *models.GetPlaylistsQuery) error {
 	var playlists = make(models.Playlists, 0)
 
-	sess := x.Limit(query.Limit)
+	sess := ss.engine.Limit(query.Limit)
 
 	if query.Name != "" {
 		sess.Where("name LIKE ?", query.Name)
@@ -143,13 +145,13 @@ func SearchPlaylists(query *models.GetPlaylistsQuery) error {
 	return err
 }
 
-func GetPlaylistItem(query *models.GetPlaylistItemsByIdQuery) error {
+func (ss *SqlStore) GetPlaylistItem(query *models.GetPlaylistItemsByIdQuery) error {
 	if query.PlaylistId == 0 {
 		return models.ErrCommandValidationFailed
 	}
 
 	var playlistItems = make([]models.PlaylistItem, 0)
-	err := x.Where("playlist_id=?", query.PlaylistId).Find(&playlistItems)
+	err := ss.engine.Where("playlist_id=?", query.PlaylistId).Find(&playlistItems)
 
 	query.Result = &playlistItems
 

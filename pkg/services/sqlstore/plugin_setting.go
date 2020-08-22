@@ -3,20 +3,12 @@ package sqlstore
 import (
 	"time"
 
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
 	"github.com/grafana/grafana/pkg/util"
 )
 
-func init() {
-	bus.AddHandler("sql", GetPluginSettings)
-	bus.AddHandler("sql", GetPluginSettingById)
-	bus.AddHandler("sql", UpdatePluginSetting)
-	bus.AddHandler("sql", UpdatePluginSettingVersion)
-}
-
-func GetPluginSettings(query *models.GetPluginSettingsQuery) error {
+func (ss *SqlStore) GetPluginSettings(query *models.GetPluginSettingsQuery) error {
 	sql := `SELECT org_id, plugin_id, enabled, pinned, plugin_version
 					FROM plugin_setting `
 	params := make([]interface{}, 0)
@@ -26,12 +18,12 @@ func GetPluginSettings(query *models.GetPluginSettingsQuery) error {
 		params = append(params, query.OrgId)
 	}
 
-	sess := x.SQL(sql, params...)
+	sess := ss.engine.SQL(sql, params...)
 	query.Result = make([]*models.PluginSettingInfoDTO, 0)
 	return sess.Find(&query.Result)
 }
 
-func GetPluginSettingById(query *models.GetPluginSettingByIdQuery) error {
+func (ss *SqlStore) GetPluginSettingById(query *models.GetPluginSettingByIdQuery) error {
 	pluginSetting := models.PluginSetting{OrgId: query.OrgId, PluginId: query.PluginId}
 	has, err := x.Get(&pluginSetting)
 	if err != nil {
@@ -43,14 +35,14 @@ func GetPluginSettingById(query *models.GetPluginSettingByIdQuery) error {
 	return nil
 }
 
-func UpdatePluginSetting(cmd *models.UpdatePluginSettingCmd) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdatePluginSetting(cmd *models.UpdatePluginSettingCmd) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var pluginSetting models.PluginSetting
-
 		exists, err := sess.Where("org_id=? and plugin_id=?", cmd.OrgId, cmd.PluginId).Get(&pluginSetting)
 		if err != nil {
 			return err
 		}
+
 		sess.UseBool("enabled")
 		sess.UseBool("pinned")
 		if !exists {
@@ -105,9 +97,10 @@ func UpdatePluginSetting(cmd *models.UpdatePluginSettingCmd) error {
 	})
 }
 
-func UpdatePluginSettingVersion(cmd *models.UpdatePluginSettingVersionCmd) error {
-	return inTransaction(func(sess *DBSession) error {
-		_, err := sess.Exec("UPDATE plugin_setting SET plugin_version=? WHERE org_id=? AND plugin_id=?", cmd.PluginVersion, cmd.OrgId, cmd.PluginId)
+func (ss *SqlStore) UpdatePluginSettingVersion(cmd *models.UpdatePluginSettingVersionCmd) error {
+	return ss.inTransaction(func(sess *DBSession) error {
+		_, err := sess.Exec("UPDATE plugin_setting SET plugin_version=? WHERE org_id=? AND plugin_id=?",
+			cmd.PluginVersion, cmd.OrgId, cmd.PluginId)
 		return err
 	})
 }

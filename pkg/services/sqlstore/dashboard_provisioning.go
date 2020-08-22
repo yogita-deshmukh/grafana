@@ -1,16 +1,8 @@
 package sqlstore
 
 import (
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 )
-
-func init() {
-	bus.AddHandler("sql", GetProvisionedDashboardDataQuery)
-	bus.AddHandler("sql", SaveProvisionedDashboard)
-	bus.AddHandler("sql", GetProvisionedDataByDashboardId)
-	bus.AddHandler("sql", UnprovisionDashboard)
-}
 
 type DashboardExtras struct {
 	Id          int64
@@ -19,23 +11,22 @@ type DashboardExtras struct {
 	Value       string
 }
 
-func GetProvisionedDataByDashboardId(cmd *models.GetProvisionedDashboardDataByIdQuery) error {
+func (ss *SqlStore) GetProvisionedDataByDashboardId(cmd *models.GetProvisionedDashboardDataByIdQuery) error {
 	result := &models.DashboardProvisioning{}
-
-	exist, err := x.Where("dashboard_id = ?", cmd.DashboardId).Get(result)
+	exist, err := ss.engine.Where("dashboard_id = ?", cmd.DashboardId).Get(result)
 	if err != nil {
 		return err
 	}
 	if exist {
 		cmd.Result = result
 	}
+
 	return nil
 }
 
-func SaveProvisionedDashboard(cmd *models.SaveProvisionedDashboardCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) SaveProvisionedDashboard(cmd *models.SaveProvisionedDashboardCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		err := saveDashboard(sess, cmd.DashboardCmd)
-
 		if err != nil {
 			return err
 		}
@@ -69,10 +60,10 @@ func saveProvisionedData(sess *DBSession, cmd *models.DashboardProvisioning, das
 	return err
 }
 
-func GetProvisionedDashboardDataQuery(cmd *models.GetProvisionedDashboardDataQuery) error {
+func (ss *SqlStore) GetProvisionedDashboardDataQuery(cmd *models.GetProvisionedDashboardDataQuery) error {
 	var result []*models.DashboardProvisioning
 
-	if err := x.Where("name = ?", cmd.Name).Find(&result); err != nil {
+	if err := ss.engine.Where("name = ?", cmd.Name).Find(&result); err != nil {
 		return err
 	}
 
@@ -82,8 +73,8 @@ func GetProvisionedDashboardDataQuery(cmd *models.GetProvisionedDashboardDataQue
 
 // UnprovisionDashboard removes row in dashboard_provisioning for the dashboard making it seem as if manually created.
 // The dashboard will still have `created_by = -1` to see it was not created by any particular user.
-func UnprovisionDashboard(cmd *models.UnprovisionDashboardCommand) error {
-	if _, err := x.Where("dashboard_id = ?", cmd.Id).Delete(&models.DashboardProvisioning{}); err != nil {
+func (ss *SqlStore) UnprovisionDashboard(cmd *models.UnprovisionDashboardCommand) error {
+	if _, err := ss.engine.Where("dashboard_id = ?", cmd.Id).Delete(&models.DashboardProvisioning{}); err != nil {
 		return err
 	}
 	return nil

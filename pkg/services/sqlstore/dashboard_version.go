@@ -3,28 +3,20 @@ package sqlstore
 import (
 	"strings"
 
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
 )
 
-func init() {
-	bus.AddHandler("sql", GetDashboardVersion)
-	bus.AddHandler("sql", GetDashboardVersions)
-	bus.AddHandler("sql", DeleteExpiredVersions)
-}
-
 // GetDashboardVersion gets the dashboard version for the given dashboard ID and version number.
-func GetDashboardVersion(query *models.GetDashboardVersionQuery) error {
+func (ss *SqlStore) GetDashboardVersion(query *models.GetDashboardVersionQuery) error {
 	version := models.DashboardVersion{}
-	has, err := x.Where("dashboard_version.dashboard_id=? AND dashboard_version.version=? AND dashboard.org_id=?", query.DashboardId, query.Version, query.OrgId).
+	has, err := ss.engine.Where("dashboard_version.dashboard_id=? AND dashboard_version.version=? AND dashboard.org_id=?",
+		query.DashboardId, query.Version, query.OrgId).
 		Join("LEFT", "dashboard", `dashboard.id = dashboard_version.dashboard_id`).
 		Get(&version)
-
 	if err != nil {
 		return err
 	}
-
 	if !has {
 		return models.ErrDashboardVersionNotFound
 	}
@@ -35,12 +27,14 @@ func GetDashboardVersion(query *models.GetDashboardVersionQuery) error {
 }
 
 // GetDashboardVersions gets all dashboard versions for the given dashboard ID.
-func GetDashboardVersions(query *models.GetDashboardVersionsQuery) error {
+func (ss *SqlStore) GetDashboardVersions(query *models.GetDashboardVersionsQuery) error {
+	dialect := ss.Dialect
+
 	if query.Limit == 0 {
 		query.Limit = 1000
 	}
 
-	err := x.Table("dashboard_version").
+	err := ss.engine.Table("dashboard_version").
 		Select(`dashboard_version.id,
 				dashboard_version.dashboard_id,
 				dashboard_version.parent_version,
@@ -70,11 +64,11 @@ func GetDashboardVersions(query *models.GetDashboardVersionsQuery) error {
 const MAX_VERSIONS_TO_DELETE_PER_BATCH = 100
 const MAX_VERSION_DELETION_BATCHES = 50
 
-func DeleteExpiredVersions(cmd *models.DeleteExpiredVersionsCommand) error {
-	return deleteExpiredVersions(cmd, MAX_VERSIONS_TO_DELETE_PER_BATCH, MAX_VERSION_DELETION_BATCHES)
+func (ss *SqlStore) DeleteExpiredVersions(cmd *models.DeleteExpiredVersionsCommand) error {
+	return ss.deleteExpiredVersions(cmd, MAX_VERSIONS_TO_DELETE_PER_BATCH, MAX_VERSION_DELETION_BATCHES)
 }
 
-func deleteExpiredVersions(cmd *models.DeleteExpiredVersionsCommand, perBatch int, maxBatches int) error {
+func (ss *SqlStore) deleteExpiredVersions(cmd *models.DeleteExpiredVersionsCommand, perBatch int, maxBatches int) error {
 	versionsToKeep := setting.DashboardVersionsToKeep
 	if versionsToKeep < 1 {
 		versionsToKeep = 1
@@ -83,7 +77,7 @@ func deleteExpiredVersions(cmd *models.DeleteExpiredVersionsCommand, perBatch in
 	for batch := 0; batch < maxBatches; batch++ {
 		deleted := int64(0)
 
-		batchErr := inTransaction(func(sess *DBSession) error {
+		batchErr := ss.inTransaction(func(sess *DBSession) error {
 			// Idea of this query is finding version IDs to delete based on formula:
 			// min_version_to_keep = min_version + (versions_count - versions_to_keep)
 			// where version stats is processed for each dashboard. This guarantees that we keep at least versions_to_keep

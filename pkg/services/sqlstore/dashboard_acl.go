@@ -1,17 +1,11 @@
 package sqlstore
 
 import (
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 )
 
-func init() {
-	bus.AddHandler("sql", UpdateDashboardAcl)
-	bus.AddHandler("sql", GetDashboardAclInfoList)
-}
-
-func UpdateDashboardAcl(cmd *models.UpdateDashboardAclCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateDashboardAcl(cmd *models.UpdateDashboardAclCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		// delete existing items
 		_, err := sess.Exec("DELETE FROM dashboard_acl WHERE dashboard_id=?", cmd.DashboardId)
 		if err != nil {
@@ -45,11 +39,11 @@ func UpdateDashboardAcl(cmd *models.UpdateDashboardAclCommand) error {
 // 1) Permissions for the dashboard
 // 2) permissions for its parent folder
 // 3) if no specific permissions have been set for the dashboard or its parent folder then get the default permissions
-func GetDashboardAclInfoList(query *models.GetDashboardAclInfoListQuery) error {
-	var err error
-
+func (ss *SqlStore) GetDashboardAclInfoList(query *models.GetDashboardAclInfoListQuery) error {
+	dialect := ss.Dialect
 	falseStr := dialect.BooleanStr(false)
 
+	var err error
 	if query.DashboardId == 0 {
 		sql := `SELECT
 		da.id,
@@ -72,7 +66,7 @@ func GetDashboardAclInfoList(query *models.GetDashboardAclInfoListQuery) error {
 		FROM dashboard_acl as da
 		WHERE da.dashboard_id = -1`
 		query.Result = make([]*models.DashboardAclInfoDTO, 0)
-		err = x.SQL(sql).Find(&query.Result)
+		err = ss.engine.SQL(sql).Find(&query.Result)
 	} else {
 		rawSQL := `
 			-- get permissions for the dashboard and its parent folder
@@ -114,7 +108,7 @@ func GetDashboardAclInfoList(query *models.GetDashboardAclInfoListQuery) error {
 			`
 
 		query.Result = make([]*models.DashboardAclInfoDTO, 0)
-		err = x.SQL(rawSQL, query.OrgId, query.DashboardId).Find(&query.Result)
+		err = ss.engine.SQL(rawSQL, query.OrgId, query.DashboardId).Find(&query.Result)
 	}
 
 	for _, p := range query.Result {

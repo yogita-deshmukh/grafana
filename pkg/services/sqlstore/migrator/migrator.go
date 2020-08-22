@@ -114,6 +114,8 @@ func (mg *Migrator) Start() error {
 		}
 	}
 
+	mg.Logger.Info("Finished DB migrations successfully")
+
 	return nil
 }
 

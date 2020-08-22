@@ -13,19 +13,24 @@ import (
 
 const mainOrgName = "Main Org."
 
-func init() {
-	bus.AddHandler("sql", GetOrgById)
-	bus.AddHandler("sql", CreateOrg)
-	bus.AddHandler("sql", UpdateOrg)
-	bus.AddHandler("sql", UpdateOrgAddress)
-	bus.AddHandler("sql", GetOrgByName)
-	bus.AddHandler("sql", SearchOrgs)
-	bus.AddHandler("sql", DeleteOrg)
+func (ss *SqlStore) addOrgHandlers() {
+	bus.AddHandler("sql", ss.GetOrgById)
+	bus.AddHandler("sql", ss.CreateOrg)
+	bus.AddHandler("sql", ss.UpdateOrg)
+	bus.AddHandler("sql", ss.UpdateOrgAddress)
+	bus.AddHandler("sql", ss.GetOrgByName)
+	bus.AddHandler("sql", ss.SearchOrgs)
+	bus.AddHandler("sql", ss.DeleteOrg)
+
+	bus.AddHandler("sql", ss.AddOrgUser)
+	bus.AddHandler("sql", ss.RemoveOrgUser)
+	bus.AddHandler("sql", ss.GetOrgUsers)
+	bus.AddHandler("sql", ss.UpdateOrgUser)
 }
 
-func SearchOrgs(query *models.SearchOrgsQuery) error {
+func (ss *SqlStore) SearchOrgs(query *models.SearchOrgsQuery) error {
 	query.Result = make([]*models.OrgDTO, 0)
-	sess := x.Table("org")
+	sess := ss.engine.Table("org")
 	if query.Query != "" {
 		sess.Where("name LIKE ?", query.Query+"%")
 	}
@@ -43,9 +48,9 @@ func SearchOrgs(query *models.SearchOrgsQuery) error {
 	return err
 }
 
-func GetOrgById(query *models.GetOrgByIdQuery) error {
+func (ss *SqlStore) GetOrgById(query *models.GetOrgByIdQuery) error {
 	var org models.Org
-	exists, err := x.Id(query.Id).Get(&org)
+	exists, err := ss.engine.Id(query.Id).Get(&org)
 	if err != nil {
 		return err
 	}
@@ -58,9 +63,9 @@ func GetOrgById(query *models.GetOrgByIdQuery) error {
 	return nil
 }
 
-func GetOrgByName(query *models.GetOrgByNameQuery) error {
+func (ss *SqlStore) GetOrgByName(query *models.GetOrgByNameQuery) error {
 	var org models.Org
-	exists, err := x.Where("name=?", query.Name).Get(&org)
+	exists, err := ss.engine.Where("name=?", query.Name).Get(&org)
 	if err != nil {
 		return err
 	}
@@ -89,8 +94,8 @@ func isOrgNameTaken(name string, existingId int64, sess *DBSession) (bool, error
 	return false, nil
 }
 
-func CreateOrg(cmd *models.CreateOrgCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) CreateOrg(cmd *models.CreateOrgCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		if isNameTaken, err := isOrgNameTaken(cmd.Name, 0, sess); err != nil {
 			return err
 		} else if isNameTaken {
@@ -128,8 +133,8 @@ func CreateOrg(cmd *models.CreateOrgCommand) error {
 	})
 }
 
-func UpdateOrg(cmd *models.UpdateOrgCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateOrg(cmd *models.UpdateOrgCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		if isNameTaken, err := isOrgNameTaken(cmd.Name, cmd.OrgId, sess); err != nil {
 			return err
 		} else if isNameTaken {
@@ -161,8 +166,8 @@ func UpdateOrg(cmd *models.UpdateOrgCommand) error {
 	})
 }
 
-func UpdateOrgAddress(cmd *models.UpdateOrgAddressCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateOrgAddress(cmd *models.UpdateOrgAddressCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		org := models.Org{
 			Address1: cmd.Address1,
 			Address2: cmd.Address2,
@@ -188,8 +193,8 @@ func UpdateOrgAddress(cmd *models.UpdateOrgAddressCommand) error {
 	})
 }
 
-func DeleteOrg(cmd *models.DeleteOrgCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) DeleteOrg(cmd *models.DeleteOrgCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		if res, err := sess.Query("SELECT 1 from org WHERE id=?", cmd.Id); err != nil {
 			return err
 		} else if len(res) != 1 {
@@ -241,6 +246,7 @@ func getOrCreateOrg(sess *DBSession, orgName string) (int64, error) {
 		if has {
 			return org.Id, nil
 		}
+
 		if setting.AutoAssignOrgId == 1 {
 			org.Name = mainOrgName
 			org.Id = int64(setting.AutoAssignOrgId)
@@ -276,10 +282,9 @@ func getOrCreateOrg(sess *DBSession, orgName string) (int64, error) {
 	return org.Id, nil
 }
 
-func createDefaultOrg(ctx context.Context) error {
-	return inTransactionCtx(ctx, func(sess *DBSession) error {
-		_, err := getOrCreateOrg(sess, mainOrgName)
-		if err != nil {
+func (ss *SqlStore) createDefaultOrg(ctx context.Context) error {
+	return ss.inTransactionCtx(ctx, func(sess *DBSession) error {
+		if _, err := getOrCreateOrg(sess, mainOrgName); err != nil {
 			return err
 		}
 

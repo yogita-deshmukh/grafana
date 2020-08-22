@@ -6,6 +6,7 @@ import (
 
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestApiKeyDataAccess(t *testing.T) {
@@ -92,8 +93,8 @@ func TestApiKeyDataAccess(t *testing.T) {
 			timeNow()
 
 			query := models.GetApiKeysQuery{OrgId: 1, IncludeExpired: false}
-			err = GetApiKeys(&query)
-			assert.Nil(t, err)
+			err = ss.GetApiKeys(&query)
+			require.Nil(t, err)
 
 			for _, k := range query.Result {
 				if k.Name == "key2" {
@@ -102,7 +103,7 @@ func TestApiKeyDataAccess(t *testing.T) {
 			}
 
 			query = models.GetApiKeysQuery{OrgId: 1, IncludeExpired: true}
-			err = GetApiKeys(&query)
+			err = ss.GetApiKeys(&query)
 			assert.Nil(t, err)
 
 			found := false

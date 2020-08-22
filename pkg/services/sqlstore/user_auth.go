@@ -12,16 +12,16 @@ import (
 
 var getTime = time.Now
 
-func init() {
-	bus.AddHandler("sql", GetUserByAuthInfo)
-	bus.AddHandler("sql", GetExternalUserInfoByLogin)
-	bus.AddHandler("sql", GetAuthInfo)
-	bus.AddHandler("sql", SetAuthInfo)
-	bus.AddHandler("sql", UpdateAuthInfo)
-	bus.AddHandler("sql", DeleteAuthInfo)
+func (ss *SqlStore) addUserAuthHandlers() {
+	bus.AddHandler("sql", ss.GetUserByAuthInfo)
+	bus.AddHandler("sql", ss.GetExternalUserInfoByLogin)
+	bus.AddHandler("sql", ss.GetAuthInfo)
+	bus.AddHandler("sql", ss.SetAuthInfo)
+	bus.AddHandler("sql", ss.UpdateAuthInfo)
+	bus.AddHandler("sql", ss.DeleteAuthInfo)
 }
 
-func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
+func (ss *SqlStore) GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 	user := &models.User{}
 	has := false
 	var err error
@@ -32,7 +32,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 		authQuery.AuthModule = query.AuthModule
 		authQuery.AuthId = query.AuthId
 
-		err = GetAuthInfo(authQuery)
+		err = ss.GetAuthInfo(authQuery)
 		if err != models.ErrUserNotFound {
 			if err != nil {
 				return err
@@ -40,7 +40,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 
 			// if user id was specified and doesn't match the user_auth entry, remove it
 			if query.UserId != 0 && query.UserId != authQuery.Result.UserId {
-				err = DeleteAuthInfo(&models.DeleteAuthInfoCommand{
+				err = ss.DeleteAuthInfo(&models.DeleteAuthInfoCommand{
 					UserAuth: authQuery.Result,
 				})
 				if err != nil {
@@ -49,14 +49,14 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 
 				authQuery.Result = nil
 			} else {
-				has, err = x.Id(authQuery.Result.UserId).Get(user)
+				has, err = ss.engine.Id(authQuery.Result.UserId).Get(user)
 				if err != nil {
 					return err
 				}
 
 				if !has {
 					// if the user has been deleted then remove the entry
-					err = DeleteAuthInfo(&models.DeleteAuthInfoCommand{
+					err = ss.DeleteAuthInfo(&models.DeleteAuthInfoCommand{
 						UserAuth: authQuery.Result,
 					})
 					if err != nil {
@@ -71,7 +71,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 
 	// If not found, try to find the user by id
 	if !has && query.UserId != 0 {
-		has, err = x.Id(query.UserId).Get(user)
+		has, err = ss.engine.Id(query.UserId).Get(user)
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 	// If not found, try to find the user by email address
 	if !has && query.Email != "" {
 		user = &models.User{Email: query.Email}
-		has, err = x.Get(user)
+		has, err = ss.engine.Get(user)
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 	// If not found, try to find the user by login
 	if !has && query.Login != "" {
 		user = &models.User{Login: query.Login}
-		has, err = x.Get(user)
+		has, err = ss.engine.Get(user)
 		if err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 			AuthModule: query.AuthModule,
 			AuthId:     query.AuthId,
 		}
-		if err := SetAuthInfo(cmd2); err != nil {
+		if err := ss.SetAuthInfo(cmd2); err != nil {
 			return err
 		}
 	}
@@ -116,7 +116,7 @@ func GetUserByAuthInfo(query *models.GetUserByAuthInfoQuery) error {
 	return nil
 }
 
-func GetExternalUserInfoByLogin(query *models.GetExternalUserInfoByLoginQuery) error {
+func (ss *SqlStore) GetExternalUserInfoByLogin(query *models.GetExternalUserInfoByLoginQuery) error {
 	userQuery := models.GetUserByLoginQuery{LoginOrEmail: query.LoginOrEmail}
 	err := bus.Dispatch(&userQuery)
 	if err != nil {
@@ -140,13 +140,13 @@ func GetExternalUserInfoByLogin(query *models.GetExternalUserInfoByLoginQuery) e
 	return nil
 }
 
-func GetAuthInfo(query *models.GetAuthInfoQuery) error {
+func (ss *SqlStore) GetAuthInfo(query *models.GetAuthInfoQuery) error {
 	userAuth := &models.UserAuth{
 		UserId:     query.UserId,
 		AuthModule: query.AuthModule,
 		AuthId:     query.AuthId,
 	}
-	has, err := x.Desc("created").Get(userAuth)
+	has, err := ss.engine.Desc("created").Get(userAuth)
 	if err != nil {
 		return err
 	}
@@ -174,8 +174,8 @@ func GetAuthInfo(query *models.GetAuthInfoQuery) error {
 	return nil
 }
 
-func SetAuthInfo(cmd *models.SetAuthInfoCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) SetAuthInfo(cmd *models.SetAuthInfoCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		authUser := &models.UserAuth{
 			UserId:     cmd.UserId,
 			AuthModule: cmd.AuthModule,
@@ -208,8 +208,8 @@ func SetAuthInfo(cmd *models.SetAuthInfoCommand) error {
 	})
 }
 
-func UpdateAuthInfo(cmd *models.UpdateAuthInfoCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateAuthInfo(cmd *models.UpdateAuthInfoCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		authUser := &models.UserAuth{
 			UserId:     cmd.UserId,
 			AuthModule: cmd.AuthModule,
@@ -247,8 +247,8 @@ func UpdateAuthInfo(cmd *models.UpdateAuthInfoCommand) error {
 	})
 }
 
-func DeleteAuthInfo(cmd *models.DeleteAuthInfoCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) DeleteAuthInfo(cmd *models.DeleteAuthInfoCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		_, err := sess.Delete(cmd.UserAuth)
 		return err
 	})

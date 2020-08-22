@@ -38,31 +38,35 @@ import (
 var addr string
 var sqlStore *sqlstore.SqlStore
 
-func TestMain(m *testing.M) {
+func main(m *testing.M) int {
 	grafDir, cfgPath, err := createGrafDir()
 	if err != nil {
 		log.Fatal().Err(err).Msgf("Failed to create Grafana dir")
 	}
 	defer func() {
 		if err := os.RemoveAll(grafDir); err != nil {
-			log.Warn().Err(err).Msgf("Failed to remove Grafana dir")
+			log.Warn().Err(err).Msgf("Failed to remove Grafana dir %q", grafDir)
 		}
+		log.Info().Msgf("Removed Grafana dir %q", grafDir)
 	}()
 
-	sqlStore, err = setUpDatabase(grafDir)
+	sqlStore, err = sqlstore.New()
 	if err != nil {
 		log.Fatal().Err(err).Msgf("Failed to set up database")
 	}
 
 	var server *Server
-	defer server.Shutdown("")
 	server, addr, err = startGrafana(grafDir, cfgPath, sqlStore)
 	if err != nil {
 		log.Fatal().Err(err).Msgf("Failed to start Grafana")
 	}
 	defer server.Shutdown("")
 
-	os.Exit(m.Run())
+	return m.Run()
+}
+
+func TestMain(m *testing.M) {
+	os.Exit(main(m))
 }
 
 func TestQueryCloudWatchMetrics(t *testing.T) {
@@ -77,9 +81,7 @@ func TestQueryCloudWatchMetrics(t *testing.T) {
 	}
 
 	t.Run("Custom metrics", func(t *testing.T) {
-		t.Log("Cleaning DB")
-		err := sqlStore.Reset()
-		require.NoError(t, err)
+		resetDatabase(t)
 
 		client = cloudwatch.FakeCWClient{
 			Metrics: []*cwapi.Metric{
@@ -150,9 +152,7 @@ func TestQueryCloudWatchLogs(t *testing.T) {
 	}
 
 	t.Run("Describe log groups", func(t *testing.T) {
-		t.Log("Cleaning DB")
-		err := sqlStore.Reset()
-		require.NoError(t, err)
+		resetDatabase(t)
 
 		client = cloudwatch.FakeCWLogsClient{}
 
@@ -355,13 +355,31 @@ func startGrafana(grafDir, cfgPath string, sqlStore *sqlstore.SqlStore) (*Server
 	return server, addr, nil
 }
 
-func setUpDatabase(grafDir string) (*sqlstore.SqlStore, error) {
-	sqlStore, err := sqlstore.New()
-	if err != nil {
-		return nil, err
+func resetDatabase(t *testing.T) {
+	t.Helper()
+
+	t.Log("Cleaning DB")
+
+	type tcount struct {
+		Count int64
 	}
 
-	if err := sqlStore.WithDbSession(context.Background(), func(sess *sqlstore.DBSession) error {
+	require.NotNil(t, sqlStore)
+	err := sqlStore.Reset()
+	require.NoError(t, err)
+
+	t.Log("Database was reset")
+	err = sqlStore.WithDbSession(context.Background(), func(session *sqlstore.DBSession) error {
+		resp := make([]*tcount, 0)
+		if err := session.SQL("select count(id) from data_source").Find(&resp); err != nil {
+			return err
+		}
+		t.Log("The number of sources", "num", resp[0].Count)
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = sqlStore.WithDbSession(context.Background(), func(sess *sqlstore.DBSession) error {
 		_, err := sess.Insert(&models.DataSource{
 			Id:      1,
 			OrgId:   1,
@@ -371,9 +389,6 @@ func setUpDatabase(grafDir string) (*sqlstore.SqlStore, error) {
 			Updated: time.Now(),
 		})
 		return err
-	}); err != nil {
-		return nil, err
-	}
-
-	return sqlStore, nil
+	})
+	require.NoError(t, err)
 }

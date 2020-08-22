@@ -1,14 +1,9 @@
 package sqlstore
 
 import (
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 )
 
-func init() {
-	bus.AddHandler("sql", GetDBHealthQuery)
-}
-
-func GetDBHealthQuery(query *models.GetDBHealthQuery) error {
-	return x.Ping()
+func (ss *SqlStore) GetDBHealthQuery(query *models.GetDBHealthQuery) error {
+	return ss.engine.Ping()
 }

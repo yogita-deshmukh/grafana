@@ -8,26 +8,26 @@ import (
 	"github.com/grafana/grafana/pkg/models"
 )
 
-func init() {
-	bus.AddHandler("sql", GetApiKeys)
-	bus.AddHandler("sql", GetApiKeyById)
-	bus.AddHandler("sql", GetApiKeyByName)
-	bus.AddHandlerCtx("sql", DeleteApiKeyCtx)
-	bus.AddHandler("sql", AddApiKey)
+func (ss *SqlStore) addAPIKeyHandlers() {
+	bus.AddHandler("sql", ss.GetApiKeys)
+	bus.AddHandler("sql", ss.GetApiKeyById)
+	bus.AddHandler("sql", ss.GetApiKeyByName)
+	bus.AddHandlerCtx("sql", ss.DeleteApiKeyCtx)
+	bus.AddHandler("sql", ss.AddApiKey)
 }
 
-func GetApiKeys(query *models.GetApiKeysQuery) error {
-	sess := x.Limit(100, 0).Where("org_id=? and ( expires IS NULL or expires >= ?)",
+func (ss *SqlStore) GetApiKeys(query *models.GetApiKeysQuery) error {
+	sess := ss.engine.Limit(100, 0).Where("org_id=? and ( expires IS NULL or expires >= ?)",
 		query.OrgId, timeNow().Unix()).Asc("name")
 	if query.IncludeExpired {
-		sess = x.Limit(100, 0).Where("org_id=?", query.OrgId).Asc("name")
+		sess = ss.engine.Limit(100, 0).Where("org_id=?", query.OrgId).Asc("name")
 	}
 
 	query.Result = make([]*models.ApiKey, 0)
 	return sess.Find(&query.Result)
 }
 
-func DeleteApiKeyCtx(ctx context.Context, cmd *models.DeleteApiKeyCommand) error {
+func (ss *SqlStore) DeleteApiKeyCtx(ctx context.Context, cmd *models.DeleteApiKeyCommand) error {
 	return withDbSession(ctx, func(sess *DBSession) error {
 		var rawSql = "DELETE FROM api_key WHERE id=? and org_id=?"
 		_, err := sess.Exec(rawSql, cmd.Id, cmd.OrgId)
@@ -35,10 +35,13 @@ func DeleteApiKeyCtx(ctx context.Context, cmd *models.DeleteApiKeyCommand) error
 	})
 }
 
-func AddApiKey(cmd *models.AddApiKeyCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) AddApiKey(cmd *models.AddApiKeyCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		key := models.ApiKey{OrgId: cmd.OrgId, Name: cmd.Name}
-		exists, _ := sess.Get(&key)
+		exists, err := sess.Get(&key)
+		if err != nil {
+			return err
+		}
 		if exists {
 			return models.ErrDuplicateApiKey
 		}
@@ -69,9 +72,9 @@ func AddApiKey(cmd *models.AddApiKeyCommand) error {
 	})
 }
 
-func GetApiKeyById(query *models.GetApiKeyByIdQuery) error {
+func (ss *SqlStore) GetApiKeyById(query *models.GetApiKeyByIdQuery) error {
 	var apikey models.ApiKey
-	has, err := x.Id(query.ApiKeyId).Get(&apikey)
+	has, err := ss.engine.Id(query.ApiKeyId).Get(&apikey)
 
 	if err != nil {
 		return err
@@ -83,9 +86,9 @@ func GetApiKeyById(query *models.GetApiKeyByIdQuery) error {
 	return nil
 }
 
-func GetApiKeyByName(query *models.GetApiKeyByNameQuery) error {
+func (ss *SqlStore) GetApiKeyByName(query *models.GetApiKeyByNameQuery) error {
 	var apikey models.ApiKey
-	has, err := x.Where("org_id=? AND name=?", query.OrgId, query.KeyName).Get(&apikey)
+	has, err := ss.engine.Where("org_id=? AND name=?", query.OrgId, query.KeyName).Get(&apikey)
 
 	if err != nil {
 		return err

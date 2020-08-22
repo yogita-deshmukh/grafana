@@ -10,13 +10,13 @@ import (
 	"github.com/grafana/grafana/pkg/setting"
 )
 
-func init() {
-	bus.AddHandler("sql", GetPreferences)
-	bus.AddHandler("sql", GetPreferencesWithDefaults)
-	bus.AddHandler("sql", SavePreferences)
+func (ss *SqlStore) addPreferencesHandlers() {
+	bus.AddHandler("sql", ss.GetPreferences)
+	bus.AddHandler("sql", ss.GetPreferencesWithDefaults)
+	bus.AddHandler("sql", ss.SavePreferences)
 }
 
-func GetPreferencesWithDefaults(query *models.GetPreferencesWithDefaultsQuery) error {
+func (ss *SqlStore) GetPreferencesWithDefaults(query *models.GetPreferencesWithDefaultsQuery) error {
 	params := make([]interface{}, 0)
 	filter := ""
 	if len(query.User.Teams) > 0 {
@@ -31,7 +31,7 @@ func GetPreferencesWithDefaults(query *models.GetPreferencesWithDefaultsQuery) e
 	params = append(params, query.User.UserId)
 	params = append(params, query.User.OrgId)
 	prefs := make([]*models.Preferences, 0)
-	err := x.Where(filter, params...).
+	err := ss.engine.Where(filter, params...).
 		OrderBy("user_id ASC, team_id ASC").
 		Find(&prefs)
 
@@ -61,10 +61,9 @@ func GetPreferencesWithDefaults(query *models.GetPreferencesWithDefaultsQuery) e
 	return nil
 }
 
-func GetPreferences(query *models.GetPreferencesQuery) error {
+func (ss *SqlStore) GetPreferences(query *models.GetPreferencesQuery) error {
 	var prefs models.Preferences
-	exists, err := x.Where("org_id=? AND user_id=? AND team_id=?", query.OrgId, query.UserId, query.TeamId).Get(&prefs)
-
+	exists, err := ss.engine.Where("org_id=? AND user_id=? AND team_id=?", query.OrgId, query.UserId, query.TeamId).Get(&prefs)
 	if err != nil {
 		return err
 	}
@@ -78,8 +77,8 @@ func GetPreferences(query *models.GetPreferencesQuery) error {
 	return nil
 }
 
-func SavePreferences(cmd *models.SavePreferencesCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) SavePreferences(cmd *models.SavePreferencesCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var prefs models.Preferences
 		exists, err := sess.Where("org_id=? AND user_id=? AND team_id=?", cmd.OrgId, cmd.UserId, cmd.TeamId).Get(&prefs)
 		if err != nil {
@@ -100,6 +99,7 @@ func SavePreferences(cmd *models.SavePreferencesCommand) error {
 			_, err = sess.Insert(&prefs)
 			return err
 		}
+
 		prefs.HomeDashboardId = cmd.HomeDashboardId
 		prefs.Timezone = cmd.Timezone
 		prefs.Theme = cmd.Theme

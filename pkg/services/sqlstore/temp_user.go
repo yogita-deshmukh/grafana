@@ -3,28 +3,19 @@ package sqlstore
 import (
 	"time"
 
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 )
 
-func init() {
-	bus.AddHandler("sql", CreateTempUser)
-	bus.AddHandler("sql", GetTempUsersQuery)
-	bus.AddHandler("sql", UpdateTempUserStatus)
-	bus.AddHandler("sql", GetTempUserByCode)
-	bus.AddHandler("sql", UpdateTempUserWithEmailSent)
-}
-
-func UpdateTempUserStatus(cmd *models.UpdateTempUserStatusCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateTempUserStatus(cmd *models.UpdateTempUserStatusCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var rawSql = "UPDATE temp_user SET status=? WHERE code=?"
 		_, err := sess.Exec(rawSql, string(cmd.Status), cmd.Code)
 		return err
 	})
 }
 
-func CreateTempUser(cmd *models.CreateTempUserCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) CreateTempUser(cmd *models.CreateTempUserCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		// create user
 		user := &models.TempUser{
 			Email:           cmd.Email,
@@ -49,8 +40,8 @@ func CreateTempUser(cmd *models.CreateTempUserCommand) error {
 	})
 }
 
-func UpdateTempUserWithEmailSent(cmd *models.UpdateTempUserWithEmailSentCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateTempUserWithEmailSent(cmd *models.UpdateTempUserWithEmailSentCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		user := &models.TempUser{
 			EmailSent:   true,
 			EmailSentOn: time.Now(),
@@ -62,7 +53,8 @@ func UpdateTempUserWithEmailSent(cmd *models.UpdateTempUserWithEmailSentCommand)
 	})
 }
 
-func GetTempUsersQuery(query *models.GetTempUsersQuery) error {
+func (ss *SqlStore) GetTempUsersQuery(query *models.GetTempUsersQuery) error {
+	dialect := ss.Dialect
 	rawSql := `SELECT
 	                tu.id             as id,
 	                tu.org_id         as org_id,
@@ -95,12 +87,12 @@ func GetTempUsersQuery(query *models.GetTempUsersQuery) error {
 	rawSql += " ORDER BY tu.created desc"
 
 	query.Result = make([]*models.TempUserDTO, 0)
-	sess := x.SQL(rawSql, params...)
+	sess := ss.engine.SQL(rawSql, params...)
 	err := sess.Find(&query.Result)
 	return err
 }
 
-func GetTempUserByCode(query *models.GetTempUserByCodeQuery) error {
+func (ss *SqlStore) GetTempUserByCode(query *models.GetTempUserByCodeQuery) error {
 	var rawSql = `SELECT
 	                tu.id             as id,
 	                tu.org_id         as org_id,
@@ -120,7 +112,7 @@ func GetTempUserByCode(query *models.GetTempUserByCodeQuery) error {
 	                WHERE tu.code=?`
 
 	var tempUser models.TempUserDTO
-	sess := x.SQL(rawSql, query.Code)
+	sess := ss.engine.SQL(rawSql, query.Code)
 	has, err := sess.Get(&tempUser)
 
 	if err != nil {

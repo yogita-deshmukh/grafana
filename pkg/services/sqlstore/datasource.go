@@ -17,21 +17,24 @@ import (
 )
 
 func init() {
-	bus.AddHandler("sql", GetDataSources)
-	bus.AddHandler("sql", GetAllDataSources)
-	bus.AddHandler("sql", AddDataSource)
-	bus.AddHandler("sql", DeleteDataSourceById)
-	bus.AddHandler("sql", DeleteDataSourceByName)
-	bus.AddHandler("sql", UpdateDataSource)
-	bus.AddHandler("sql", GetDataSourceById)
-	bus.AddHandler("sql", GetDataSourceByName)
 }
 
-func getDataSourceByID(id, orgID int64, engine *xorm.Engine) (*models.DataSource, error) {
+func (ss *SqlStore) addDataSourceHandlers() {
+	bus.AddHandler("sql", ss.GetDataSources)
+	bus.AddHandler("sql", ss.GetAllDataSources)
+	bus.AddHandler("sql", ss.AddDataSource)
+	bus.AddHandler("sql", ss.DeleteDataSourceById)
+	bus.AddHandler("sql", ss.DeleteDataSourceByName)
+	bus.AddHandler("sql", ss.UpdateDataSource)
+	bus.AddHandler("sql", ss.GetDataSourceById)
+	bus.AddHandler("sql", ss.GetDataSourceByName)
+}
+
+func (ss *SqlStore) getDataSourceByID(id, orgID int64) (*models.DataSource, error) {
 	metrics.MDBDataSourceQueryByID.Inc()
 
 	datasource := models.DataSource{OrgId: orgID, Id: id}
-	has, err := engine.Get(&datasource)
+	has, err := ss.engine.Get(&datasource)
 	if err != nil {
 		sqlog.Error("Failed getting data source", "err", err, "id", id, "orgId", orgID)
 		return nil, err
@@ -45,44 +48,45 @@ func getDataSourceByID(id, orgID int64, engine *xorm.Engine) (*models.DataSource
 }
 
 func (ss *SqlStore) GetDataSourceByID(id, orgID int64) (*models.DataSource, error) {
-	return getDataSourceByID(id, orgID, ss.engine)
+	return ss.getDataSourceByID(id, orgID)
 }
 
-func GetDataSourceById(query *models.GetDataSourceByIdQuery) error {
-	ds, err := getDataSourceByID(query.Id, query.OrgId, x)
+func (ss *SqlStore) GetDataSourceById(query *models.GetDataSourceByIdQuery) error {
+	ds, err := ss.getDataSourceByID(query.Id, query.OrgId)
 	query.Result = ds
 
 	return err
 }
 
-func GetDataSourceByName(query *models.GetDataSourceByNameQuery) error {
+func (ss *SqlStore) GetDataSourceByName(query *models.GetDataSourceByNameQuery) error {
 	datasource := models.DataSource{OrgId: query.OrgId, Name: query.Name}
-	has, err := x.Get(&datasource)
-
+	has, err := ss.engine.Get(&datasource)
+	if err != nil {
+		return err
+	}
 	if !has {
 		return models.ErrDataSourceNotFound
 	}
 
 	query.Result = &datasource
-	return err
+	return nil
 }
 
-func GetDataSources(query *models.GetDataSourcesQuery) error {
-	sess := x.Limit(5000, 0).Where("org_id=?", query.OrgId).Asc("name")
+func (ss *SqlStore) GetDataSources(query *models.GetDataSourcesQuery) error {
+	sess := ss.engine.Limit(5000, 0).Where("org_id=?", query.OrgId).Asc("name")
 
 	query.Result = make([]*models.DataSource, 0)
 	return sess.Find(&query.Result)
 }
 
-func GetAllDataSources(query *models.GetAllDataSourcesQuery) error {
-	sess := x.Limit(5000, 0).Asc("name")
-
+func (ss *SqlStore) GetAllDataSources(query *models.GetAllDataSourcesQuery) error {
+	sess := ss.engine.Limit(5000, 0).Asc("name")
 	query.Result = make([]*models.DataSource, 0)
 	return sess.Find(&query.Result)
 }
 
-func DeleteDataSourceById(cmd *models.DeleteDataSourceByIdCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) DeleteDataSourceById(cmd *models.DeleteDataSourceByIdCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var rawSql = "DELETE FROM data_source WHERE id=? and org_id=?"
 		result, err := sess.Exec(rawSql, cmd.Id, cmd.OrgId)
 		affected, _ := result.RowsAffected()
@@ -91,8 +95,8 @@ func DeleteDataSourceById(cmd *models.DeleteDataSourceByIdCommand) error {
 	})
 }
 
-func DeleteDataSourceByName(cmd *models.DeleteDataSourceByNameCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) DeleteDataSourceByName(cmd *models.DeleteDataSourceByNameCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var rawSql = "DELETE FROM data_source WHERE name=? and org_id=?"
 		result, err := sess.Exec(rawSql, cmd.Name, cmd.OrgId)
 		affected, _ := result.RowsAffected()
@@ -101,11 +105,13 @@ func DeleteDataSourceByName(cmd *models.DeleteDataSourceByNameCommand) error {
 	})
 }
 
-func AddDataSource(cmd *models.AddDataSourceCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) AddDataSource(cmd *models.AddDataSourceCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		existing := models.DataSource{OrgId: cmd.OrgId, Name: cmd.Name}
-		has, _ := sess.Get(&existing)
-
+		has, err := sess.Get(&existing)
+		if err != nil {
+			return err
+		}
 		if has {
 			return models.ErrDataSourceNameExists
 		}
@@ -117,7 +123,7 @@ func AddDataSource(cmd *models.AddDataSourceCommand) error {
 		if cmd.Uid == "" {
 			uid, err := generateNewDatasourceUid(sess, cmd.OrgId)
 			if err != nil {
-				return errutil.Wrapf(err, "Failed to generate UID for datasource %q", cmd.Name)
+				return errutil.Wrapf(err, "failed to generate UID for datasource %q", cmd.Name)
 			}
 			cmd.Uid = uid
 		}
@@ -171,8 +177,8 @@ func updateIsDefaultFlag(ds *models.DataSource, sess *DBSession) error {
 	return nil
 }
 
-func UpdateDataSource(cmd *models.UpdateDataSourceCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateDataSource(cmd *models.UpdateDataSourceCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		if cmd.JsonData == nil {
 			cmd.JsonData = simplejson.New()
 		}

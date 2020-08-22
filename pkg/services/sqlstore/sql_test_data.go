@@ -4,13 +4,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 )
-
-func init() {
-	bus.AddHandler("sql", InsertSqlTestData)
-}
 
 func sqlRandomWalk(m1 string, m2 string, intWalker int64, floatWalker float64, sess *DBSession) error {
 	timeWalker := time.Now().UTC().Add(time.Hour * -200)
@@ -43,8 +38,8 @@ func sqlRandomWalk(m1 string, m2 string, intWalker int64, floatWalker float64, s
 	return nil
 }
 
-func InsertSqlTestData(cmd *models.InsertSqlTestDataCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) InsertSQLTestData() error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var err error
 
 		sqlog.Info("SQL TestData: Clearing previous test data")

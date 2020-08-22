@@ -5,20 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/util"
 )
 
-func init() {
-	bus.AddHandler("sql", AddOrgUser)
-	bus.AddHandler("sql", RemoveOrgUser)
-	bus.AddHandler("sql", GetOrgUsers)
-	bus.AddHandler("sql", UpdateOrgUser)
-}
-
-func AddOrgUser(cmd *models.AddOrgUserCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) AddOrgUser(cmd *models.AddOrgUserCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		// check if user exists
 		var user models.User
 		if exists, err := sess.ID(cmd.UserId).Get(&user); err != nil {
@@ -71,8 +63,8 @@ func AddOrgUser(cmd *models.AddOrgUserCommand) error {
 	})
 }
 
-func UpdateOrgUser(cmd *models.UpdateOrgUserCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) UpdateOrgUser(cmd *models.UpdateOrgUserCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var orgUser models.OrgUser
 		exists, err := sess.Where("org_id=? AND user_id=?", cmd.OrgId, cmd.UserId).Get(&orgUser)
 		if err != nil {
@@ -94,11 +86,11 @@ func UpdateOrgUser(cmd *models.UpdateOrgUserCommand) error {
 	})
 }
 
-func GetOrgUsers(query *models.GetOrgUsersQuery) error {
+func (ss *SqlStore) GetOrgUsers(query *models.GetOrgUsersQuery) error {
 	query.Result = make([]*models.OrgUserDTO, 0)
 
-	sess := x.Table("org_user")
-	sess.Join("INNER", x.Dialect().Quote("user"), fmt.Sprintf("org_user.user_id=%s.id", x.Dialect().Quote("user")))
+	sess := ss.engine.Table("org_user")
+	sess.Join("INNER", ss.engine.Dialect().Quote("user"), fmt.Sprintf("org_user.user_id=%s.id", ss.engine.Dialect().Quote("user")))
 
 	whereConditions := make([]string, 0)
 	whereParams := make([]interface{}, 0)
@@ -142,8 +134,8 @@ func GetOrgUsers(query *models.GetOrgUsersQuery) error {
 	return nil
 }
 
-func RemoveOrgUser(cmd *models.RemoveOrgUserCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) RemoveOrgUser(cmd *models.RemoveOrgUserCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		// check if user exists
 		var user models.User
 		if exists, err := sess.ID(cmd.UserId).Get(&user); err != nil {
@@ -199,7 +191,7 @@ func RemoveOrgUser(cmd *models.RemoveOrgUserCommand) error {
 			}
 		} else if cmd.ShouldDeleteOrphanedUser {
 			// no other orgs, delete the full user
-			if err := deleteUserInTransaction(sess, &models.DeleteUserCommand{UserId: user.Id}); err != nil {
+			if err := ss.deleteUserInTransaction(sess, &models.DeleteUserCommand{UserId: user.Id}); err != nil {
 				return err
 			}
 

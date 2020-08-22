@@ -10,14 +10,14 @@ import (
 
 var getTimeNow = time.Now
 
-func init() {
-	bus.AddHandler("sql", CreateLoginAttempt)
-	bus.AddHandler("sql", DeleteOldLoginAttempts)
-	bus.AddHandler("sql", GetUserLoginAttemptCount)
+func (ss *SqlStore) addLoginAttemptHandlers() {
+	bus.AddHandler("sql", ss.CreateLoginAttempt)
+	bus.AddHandler("sql", ss.DeleteOldLoginAttempts)
+	bus.AddHandler("sql", ss.GetUserLoginAttemptCount)
 }
 
-func CreateLoginAttempt(cmd *models.CreateLoginAttemptCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) CreateLoginAttempt(cmd *models.CreateLoginAttemptCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		loginAttempt := models.LoginAttempt{
 			Username:  cmd.Username,
 			IpAddress: cmd.IpAddress,
@@ -34,12 +34,11 @@ func CreateLoginAttempt(cmd *models.CreateLoginAttemptCommand) error {
 	})
 }
 
-func DeleteOldLoginAttempts(cmd *models.DeleteOldLoginAttemptsCommand) error {
-	return inTransaction(func(sess *DBSession) error {
+func (ss *SqlStore) DeleteOldLoginAttempts(cmd *models.DeleteOldLoginAttemptsCommand) error {
+	return ss.inTransaction(func(sess *DBSession) error {
 		var maxId int64
 		sql := "SELECT max(id) as id FROM login_attempt WHERE created < ?"
 		result, err := sess.Query(sql, cmd.OlderThan.Unix())
-
 		if err != nil {
 			return err
 		}
@@ -66,13 +65,12 @@ func DeleteOldLoginAttempts(cmd *models.DeleteOldLoginAttemptsCommand) error {
 	})
 }
 
-func GetUserLoginAttemptCount(query *models.GetUserLoginAttemptCountQuery) error {
+func (ss *SqlStore) GetUserLoginAttemptCount(query *models.GetUserLoginAttemptCountQuery) error {
 	loginAttempt := new(models.LoginAttempt)
-	total, err := x.
+	total, err := ss.engine.
 		Where("username = ?", query.Username).
 		And("created >= ?", query.Since.Unix()).
 		Count(loginAttempt)
-
 	if err != nil {
 		return err
 	}

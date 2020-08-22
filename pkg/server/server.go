@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +36,6 @@ import (
 	_ "github.com/grafana/grafana/pkg/services/alerting"
 	_ "github.com/grafana/grafana/pkg/services/auth"
 	_ "github.com/grafana/grafana/pkg/services/cleanup"
-	"github.com/grafana/grafana/pkg/services/datasources"
 	_ "github.com/grafana/grafana/pkg/services/notifications"
 	_ "github.com/grafana/grafana/pkg/services/provisioning"
 	_ "github.com/grafana/grafana/pkg/services/rendering"
@@ -124,13 +124,8 @@ func (s *Server) init(cfg *Config) error {
 	login.Init()
 	social.NewOAuthService()
 
-	if cfg.SQLStore != nil {
-		// TODO: Inject cfg.SQLStore in DI system
-		//s.log.Debug("Using provided SQL store")
-	}
-
 	services := registry.GetServices()
-	if err := s.buildServiceGraph(services); err != nil {
+	if err := s.buildServiceGraph(services, cfg); err != nil {
 		return err
 	}
 
@@ -148,11 +143,6 @@ func (s *Server) init(cfg *Config) error {
 					s.log.Debug("Using provided listener for HTTP server")
 					httpS.Listener = cfg.Listener
 				}
-			} else if ss, ok := service.Instance.(datasources.CacheService); ok {
-				if cfg.SQLStore != nil {
-					s.log.Debug("Using provided SQL store for data source cache service")
-					ss.SetSQLStore(cfg.SQLStore)
-				}
 			}
 		}
 		if err := service.Instance.Init(); err != nil {
@@ -166,7 +156,7 @@ func (s *Server) init(cfg *Config) error {
 // Run initializes and starts services. This will block until all services have
 // exited. To initiate shutdown, call the Shutdown method in another goroutine.
 func (s *Server) Run() (err error) {
-	if err = s.init(nil); err != nil {
+	if err = s.init(&Config{}); err != nil {
 		return
 	}
 
@@ -277,7 +267,7 @@ func (s *Server) writePIDFile() {
 }
 
 // buildServiceGraph builds a graph of services and their dependencies.
-func (s *Server) buildServiceGraph(services []*registry.Descriptor) error {
+func (s *Server) buildServiceGraph(services []*registry.Descriptor, cfg *Config) error {
 	// Specify service dependencies.
 	objs := []interface{}{
 		bus.GetBus(),
@@ -286,7 +276,21 @@ func (s *Server) buildServiceGraph(services []*registry.Descriptor) error {
 		localcache.New(5*time.Minute, 10*time.Minute),
 		s,
 	}
-
+	if cfg.SQLStore != nil {
+		// TODO: Inject cfg.SQLStore in DI system
+		s.log.Debug("Dependency injecting provided SQL store")
+		found := false
+		for _, service := range services {
+			if strings.ToLower(service.Name) == "sqlstore" {
+				service.Instance = cfg.SQLStore
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("couldn't find SQL Store to override in dependency injection graph")
+		}
+	}
 	for _, service := range services {
 		objs = append(objs, service.Instance)
 	}
