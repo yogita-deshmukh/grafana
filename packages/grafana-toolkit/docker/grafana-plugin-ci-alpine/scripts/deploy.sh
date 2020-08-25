@@ -23,11 +23,12 @@ get_file "https://dl.google.com/go/$filename" "/tmp/$filename" "08df79b46b0adf49
 untar_file "/tmp/$filename"
 
 # Install golangci-lint
-GOLANGCILINT_VERSION=1.28.0
+GOLANGCILINT_VERSION=1.30.0
+GOLANGCILINT_SHA="c8e8fc5753e74d2eb489ad428dbce219eb9907799a57c02bcd8b80b4b98c60d4"
 filename="golangci-lint-${GOLANGCILINT_VERSION}-linux-amd64"
 get_file "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCILINT_VERSION}/$filename.tar.gz" \
     "/tmp/$filename.tar.gz" \
-    "179d34edf4baf6454a7081fbaaf74dc99397a3be8e1a535dee04d835a977bf76"
+    $GOLANGCILINT_SHA
 untar_file "/tmp/$filename.tar.gz"
 ln -s /usr/local/${filename}/golangci-lint /usr/local/bin/golangci-lint
 ln -s /usr/local/go/bin/go /usr/local/bin/go
