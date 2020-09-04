@@ -5,6 +5,15 @@ alpine_image = 'alpine:3.12'
 windows_image = 'mcr.microsoft.com/windows:1809'
 grabpl_version = '0.5.5'
 
+def step(dct):
+    # Should record step's start time, so when the step fails or succeeds we can publish the event to Graphite.
+    # Can record start time by inserting a command at the beginning
+    # Can record success by inserting a command at the end
+    # Might it be possible to record failure by
+    dct['commands'].insert(0, './bin/grabpl start-drone-step')
+    dct['commands'].append('./bin/grabpl end-drone-step')
+    return dct
+
 def pr_pipelines(edition):
     services = [
         {
@@ -234,7 +243,7 @@ def init_steps(edition, platform):
     ]
 
 def lint_backend_step(edition):
-    return {
+    return step({
         'name': 'lint-backend',
         'image': build_image,
         'environment': {
@@ -250,7 +259,7 @@ def lint_backend_step(edition):
             'revive -formatter stylish -config scripts/go/configs/revive.toml ./pkg/...',
             './scripts/revive-strict',
         ],
-    }
+    })
 
 def build_storybook_step(edition):
     return {

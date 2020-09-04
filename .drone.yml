@@ -31,9 +31,11 @@ steps:
 - name: lint-backend
   image: grafana/build-container:1.2.26
   commands:
+  - ./bin/grabpl start-drone-step
   - golangci-lint run --config scripts/go/configs/.golangci.toml ./pkg/...
   - revive -formatter stylish -config scripts/go/configs/revive.toml ./pkg/...
   - ./scripts/revive-strict
+  - ./bin/grabpl end-drone-step
   environment:
     CGO_ENABLED: 1
   depends_on:
@@ -257,9 +259,11 @@ steps:
 - name: lint-backend
   image: grafana/build-container:1.2.26
   commands:
+  - ./bin/grabpl start-drone-step
   - golangci-lint run --config scripts/go/configs/.golangci.toml ./pkg/...
   - revive -formatter stylish -config scripts/go/configs/revive.toml ./pkg/...
   - ./scripts/revive-strict
+  - ./bin/grabpl end-drone-step
   environment:
     CGO_ENABLED: 1
   depends_on:
