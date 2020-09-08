@@ -3,7 +3,7 @@ publish_image = 'grafana/grafana-ci-deploy:1.2.5'
 grafana_docker_image = 'grafana/drone-grafana-docker:0.2.0'
 alpine_image = 'alpine:3.12'
 windows_image = 'mcr.microsoft.com/windows:1809'
-grabpl_version = '0.5.5'
+grabpl_version = '0.5.7'
 
 def step(dct):
     # Should record step's start time, so when the step fails or succeeds we can publish the event to Graphite.
@@ -91,7 +91,7 @@ def master_pipelines(edition):
         codespell_step(),
         shellcheck_step(),
         test_backend_step(),
-        test_frontend_step(),
+        test_frontend_step(publish_metrics=True),
         build_backend_step(edition=edition),
         build_frontend_step(edition=edition),
         build_plugins_step(edition=edition),
@@ -362,8 +362,13 @@ def test_backend_step():
         ],
     }
 
-def test_frontend_step():
-    return {
+def test_frontend_step(publish_metrics=False):
+    cmds = [
+        'yarn run ci:test-frontend',
+    ]
+    if publish_metrics:
+        cmds.append('./scripts/ci-frontend-metrics.sh | ./bin/grabpl publish-metrics $${GRAFANA_MISC_STATS_API_KEY}')
+    dct = {
         'name': 'test-frontend',
         'image': build_image,
         'depends_on': [
@@ -372,13 +377,16 @@ def test_frontend_step():
         'environment': {
             'TEST_MAX_WORKERS': '50%',
         },
-        'commands': [
-            'yarn run prettier:check',
-            'yarn run packages:typecheck',
-            'yarn run typecheck',
-            'yarn run test',
-        ],
+        'commands': cmds,
     }
+    if publish_metrics:
+        dct['environment'] = {
+            'GRAFANA_MISC_STATS_API_KEY': {
+                'from_secret': 'grafana_misc_stats_api_key',
+            },
+        }
+
+    return dct
 
 def codespell_step():
     return {
