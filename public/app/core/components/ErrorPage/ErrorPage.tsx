@@ -54,7 +54,7 @@ export class ErrorPage extends PureComponent<Props> {
                       <p className="left-margin">0%</p>
                     </div>
                     <div>
-                      <h3>Sorry for the inconvenience</h3>
+                      <h3 style={{color: orange}}>Sorry for the inconvenience</h3>
                       <p>
                         Please go back to your{' '}
                         <a href={config.appSubUrl} className="error-link">
