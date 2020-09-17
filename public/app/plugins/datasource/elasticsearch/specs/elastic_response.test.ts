@@ -2,8 +2,15 @@ import { DataFrameView, FieldCache, KeyValue, MutableDataFrame } from '@grafana/
 import { ElasticResponse } from '../elastic_response';
 import flatten from 'app/core/utils/flatten';
 
+const executeRefIdTest = (targets: any, result: any) => {
+  result.data.forEach((series: any) => {
+    // Change
+    expect(series.refId).toBe(targets[0].refId);
+  });
+};
+
 describe('ElasticResponse', () => {
-  let targets;
+  let targets: any;
   let response: any;
   let result: any;
 
@@ -46,6 +53,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].datapoints.length).toBe(2);
       expect(result.data[0].datapoints[0][0]).toBe(10);
       expect(result.data[0].datapoints[0][1]).toBe(1000);
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
@@ -98,6 +109,10 @@ describe('ElasticResponse', () => {
       expect(result.data[1].target).toBe('Average value');
       expect(result.data[1].datapoints[0][0]).toBe(88);
       expect(result.data[1].datapoints[1][0]).toBe(99);
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
@@ -156,6 +171,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].datapoints.length).toBe(2);
       expect(result.data[0].target).toBe('server1');
       expect(result.data[1].target).toBe('server2');
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
@@ -220,6 +239,10 @@ describe('ElasticResponse', () => {
       expect(result.data[2].target).toBe('server2 Count');
       expect(result.data[3].target).toBe('server2 Average @value');
     });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
+    });
   });
 
   describe('with percentiles ', () => {
@@ -267,6 +290,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].datapoints[0][0]).toBe(3.3);
       expect(result.data[0].datapoints[0][1]).toBe(1000);
       expect(result.data[1].datapoints[1][0]).toBe(4.5);
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
@@ -347,6 +374,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].datapoints[0][0]).toBe(10.2);
       expect(result.data[1].datapoints[0][0]).toBe(3);
     });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
+    });
   });
 
   describe('single group by with alias pattern', () => {
@@ -416,6 +447,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].target).toBe('server1 Count and {{not_exist}} server1');
       expect(result.data[1].target).toBe('server2 Count and {{not_exist}} server2');
       expect(result.data[2].target).toBe('0 Count and {{not_exist}} 0');
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
@@ -513,6 +548,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].target).toBe('@metric:cpu');
       expect(result.data[1].target).toBe('@metric:logins.count');
     });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
+    });
   });
 
   describe('with dropfirst and last aggregation', () => {
@@ -566,6 +605,10 @@ describe('ElasticResponse', () => {
     it('should remove first and last value', () => {
       expect(result.data.length).toBe(2);
       expect(result.data[0].datapoints.length).toBe(1);
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
@@ -756,6 +799,12 @@ describe('ElasticResponse', () => {
       expect(result.data[0].datapoints[0].sourceProp).toBe('asd');
       expect(result.data[0].datapoints[0].fieldProp).toBe('field');
     });
+
+    it('should add the correct refId to each returned series', () => {
+      result.data.forEach((series: any) => {
+        expect(series.target).toBe(targets[0].refId);
+      });
+    });
   });
 
   describe('with bucket_script ', () => {
@@ -823,6 +872,10 @@ describe('ElasticResponse', () => {
       expect(result.data[0].datapoints[1][0]).toBe(3);
       expect(result.data[1].datapoints[1][0]).toBe(4);
       expect(result.data[2].datapoints[1][0]).toBe(12);
+    });
+
+    it('should add the correct refId to each returned series', () => {
+      executeRefIdTest(targets, result);
     });
   });
 
