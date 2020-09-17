@@ -30,7 +30,7 @@ export class ElasticResponse {
 
       switch (metric.type) {
         case 'count': {
-          newSeries = { datapoints: [], metric: 'count', props: props };
+          newSeries = { datapoints: [], metric: 'count', props: props, refId: target.refId };
           for (i = 0; i < esAgg.buckets.length; i++) {
             bucket = esAgg.buckets[i];
             value = bucket.doc_count;
@@ -53,6 +53,7 @@ export class ElasticResponse {
               metric: 'p' + percentileName,
               props: props,
               field: metric.field,
+              refId: target.refId,
             };
 
             for (i = 0; i < esAgg.buckets.length; i++) {
@@ -76,6 +77,7 @@ export class ElasticResponse {
               metric: statName,
               props: props,
               field: metric.field,
+              refId: target.refId,
             };
 
             for (i = 0; i < esAgg.buckets.length; i++) {
@@ -101,6 +103,7 @@ export class ElasticResponse {
             field: metric.field,
             metricId: metric.id,
             props: props,
+            refId: target.refId,
           };
           for (i = 0; i < esAgg.buckets.length; i++) {
             bucket = esAgg.buckets[i];
@@ -324,11 +327,11 @@ export class ElasticResponse {
     }
   }
 
-  processHits(hits: { total: { value: any }; hits: any[] }, seriesList: any[]) {
+  processHits(hits: { total: { value: any }; hits: any[] }, seriesList: any[], target: any) {
     const hitsTotal = typeof hits.total === 'number' ? hits.total : hits.total.value; // <- Works with Elasticsearch 7.0+
 
     const series: any = {
-      target: 'docs',
+      target: target.refId,
       type: 'docs',
       datapoints: [],
       total: hitsTotal,
@@ -480,14 +483,14 @@ export class ElasticResponse {
       if (response.error) {
         throw this.getErrorFromElasticResponse(this.response, response.error);
       }
+      const target = this.targets[i];
 
       if (response.hits && response.hits.hits.length > 0) {
-        this.processHits(response.hits, seriesList);
+        this.processHits(response.hits, seriesList, target);
       }
 
       if (response.aggregations) {
         const aggregations = response.aggregations;
-        const target = this.targets[i];
         const tmpSeriesList: any[] = [];
         const table = new TableModel();
 
